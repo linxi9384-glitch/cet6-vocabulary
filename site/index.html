@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f6f7f3">
+  <meta name="apple-mobile-web-app-title" content="六级词本">
+  <title>六级词本 · CET-6</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./app-192.png">
+  <link rel="apple-touch-icon" href="./app-192.png">
+  <link rel="stylesheet" href="./font/lucide.css">
+  <link rel="stylesheet" href="./style.css">
+  <script type="module" src="./app.mjs"></script>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <a class="brand" href="#home" aria-label="六级词本首页">
+        <span class="brand-symbol"><i class="icon-book-open" aria-hidden="true"></i></span>
+        <span><strong>六级词本</strong><small>CET-6 VOCABULARY</small></span>
+      </a>
+      <nav class="nav" aria-label="主导航">
+        <a href="#home" data-nav="home"><i class="icon-layout-grid" aria-hidden="true"></i><span>单元目录</span></a>
+        <a href="#errors" data-nav="errors"><i class="icon-bookmark" aria-hidden="true"></i><span>错题本</span><span id="nav-count" class="nav-count" hidden></span></a>
+        <a href="#settings" data-nav="settings"><i class="icon-settings-2" aria-hidden="true"></i><span>设置与备份</span></a>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="sidebar-progress"><span>词库掌握进度</span><strong id="overall-percent">0%</strong></div>
+        <div class="meter"><span id="overall-bar"></span></div>
+        <small id="overall-label">0 / 896 条双向答对</small>
+      </div>
+    </aside>
+    <main class="workspace">
+      <header class="topbar">
+        <div id="breadcrumb" class="breadcrumb">学习空间</div>
+        <div class="topbar-tools">
+          <button type="button" class="search-button" data-action="search" title="搜索词条">
+            <i class="icon-search" aria-hidden="true"></i><span>搜索词条</span>
+          </button>
+          <span class="device"><span></span><span id="connection-label">本机学习</span></span>
+        </div>
+      </header>
+      <div id="view" class="view"><p role="status">正在加载词库…</p></div>
+    </main>
+  </div>
+  <dialog id="dialog" aria-labelledby="dialog-title"></dialog>
+  <div id="notice" class="notice" role="status" hidden></div>
+</body>
+</html>

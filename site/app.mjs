@@ -1,6 +1,6 @@
 import {
   assessAnswer, blankState, directions, finishRun, lessonProgress, makeBackup, parseBackup,
-  shuffledIds, shuffleSizes, startRun,
+  practiceDirections, shuffledIds, shuffleSizes, startRun,
 } from './study.mjs';
 
 const storageKey = 'cet6.study.v1';
@@ -12,6 +12,7 @@ const chapterNames = ['第一章', '第二章', '第三章', '第四章'];
 const mode = {
   'zh-en': { label: '中译英', icon: 'pencil-line', input: '输入英文' },
   'en-zh': { label: '英译中', icon: 'languages', input: '输入中文' },
+  dictation: { label: '听写', icon: 'headphones', input: '输入英文' },
 };
 const resultLabel = { correct: '答对', wrong: '答错', skipped: '未作答', pending: '待自评' };
 const pad = value => String(value).padStart(2, '0');
@@ -23,8 +24,9 @@ const html = value => String(value ?? '').replace(/[&<>"']/g, char => ({
 const idsOf = unit => unit.blocks.flatMap(block => block.ids);
 const unitPath = (id, direction) => `#unit/${id}${direction ? `/${direction}` : ''}`;
 const reviewPath = (unit, direction) => `#review/${unit}/${direction}`;
-const shufflePath = (chapter, direction) => `#shuffle/${chapter}/${direction}`;
-const shuffleKey = (chapter, direction) => `shuffle:${chapter}:${direction}`;
+const drawMode = name => name === 'shuffle' || name === 'dictation';
+const drawDirections = name => name === 'dictation' ? ['dictation'] : directions;
+const drawPath = (name, chapter, direction) => `#${name}/${chapter}${name === 'shuffle' ? `/${direction}` : ''}`;
 const shuffleScope = chapter => chapter ? chapterNames[chapter - 1] : '全词库';
 const needsAssessment = run => Object.values(run.results).includes('pending');
 const displayDate = value => new Date(value).toLocaleString('zh-CN', {
@@ -77,10 +79,11 @@ function route() {
   const [name, raw, direction] = location.hash.slice(1).split('/');
   const id = Number(raw);
   if (name === 'unit' && units.has(id)) return { name, id, direction: directions.includes(direction) ? direction : null };
-  if (name === 'review' && (id === 0 || units.has(id)) && directions.includes(direction)) return { name, id, direction };
-  if (name === 'shuffle') {
-    const saved = raw === String(id) && directions.includes(direction) && state.runs[shuffleKey(id, direction)];
-    return saved ? { name, id, direction } : { name };
+  if (name === 'review' && (id === 0 || units.has(id)) && practiceDirections.includes(direction)) return { name, id, direction };
+  if (drawMode(name)) {
+    const roundDirection = name === 'dictation' ? 'dictation' : direction;
+    const saved = raw === String(id) && drawDirections(name).includes(roundDirection) && state.runs[`${name}:${id}:${roundDirection}`];
+    return saved ? { name, id, direction: roundDirection } : { name };
   }
   if (name === 'errors' || name === 'settings') return { name };
   const lastChapter = units.get(state.lastUnit)?.chapter ?? 1;
@@ -121,7 +124,7 @@ function updateShell() {
     if (link.dataset.nav === selected) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   }
-  const labels = { home: '单元目录', unit: unitName(page.id), shuffle: '乱序练习', errors: '错题本', review: '错题复测', settings: '设置与备份' };
+  const labels = { home: '单元目录', unit: unitName(page.id), shuffle: '乱序练习', dictation: '听写', errors: '错题本', review: '错题复测', settings: '设置与备份' };
   document.querySelector('#breadcrumb').innerHTML = `学习空间 ${icon('chevron-right')} <strong>${labels[page.name]}</strong>`;
 }
 
@@ -201,24 +204,26 @@ function previewView() {
     </section>`;
 }
 
-function shuffleView() {
+function drawView() {
+  const name = page.name;
+  const listening = name === 'dictation';
   const scopes = [0, ...bank.chapters.map(chapter => chapter.id)];
-  const rounds = scopes.flatMap(chapter => directions.flatMap(direction => {
-    const run = state.runs[shuffleKey(chapter, direction)];
+  const rounds = scopes.flatMap(chapter => drawDirections(name).flatMap(direction => {
+    const run = state.runs[`${name}:${chapter}:${direction}`];
     if (!run) return [];
-    const label = !run.results ? '继续答题' : needsAssessment(run) ? '继续自评' : '查看结果';
+    const label = !run.results ? (listening ? '继续听写' : '继续答题') : needsAssessment(run) ? '继续自评' : '查看结果';
     const status = !run.results ? `第 ${run.index + 1} / ${run.ids.length} 题` : `${run.ids.length} 题`;
-    return `<div class="setting-row"><div><strong>${shuffleScope(chapter)} · ${mode[direction].label}</strong><small>${status}</small></div>
-      <a class="button" href="${shufflePath(chapter, direction)}">${label} ${icon('arrow-right')}</a></div>`;
+    return `<div class="setting-row"><div><strong>${shuffleScope(chapter)}${listening ? '' : ` · ${mode[direction].label}`}</strong><small>${status}</small></div>
+      <a class="button" href="${drawPath(name, chapter, direction)}">${label} ${icon('arrow-right')}</a></div>`;
   }));
-  return `<section class="section-head"><h1>乱序练习</h1></section>
-    <form id="shuffle-form" class="shuffle-form" aria-labelledby="shuffle-form-title">
-      <h2 id="shuffle-form-title">新一轮</h2>
+  return `<section class="section-head"><h1>${listening ? '听写' : '乱序练习'}</h1></section>
+    <form data-draw="${name}" class="shuffle-form" aria-labelledby="draw-form-title">
+      <h2 id="draw-form-title">新一轮</h2>
       <div class="shuffle-options">
-        <label for="shuffle-scope">出题范围 <select id="shuffle-scope" name="scope">${scopes.map(chapter => `<option value="${chapter}">${shuffleScope(chapter)}</option>`).join('')}</select></label>
-        <label for="shuffle-direction">答题方向 <select id="shuffle-direction" name="direction">${directions.map(direction => `<option value="${direction}">${mode[direction].label}</option>`).join('')}</select></label>
-        <label for="shuffle-size">题数 <select id="shuffle-size" name="size">${shuffleSizes.map(count => `<option value="${count}" ${count === 20 ? 'selected' : ''}>${count} 题</option>`).join('')}</select></label>
-        <button class="button primary" type="submit">${icon('shuffle')} 开始练习</button>
+        <label for="draw-scope">出题范围 <select id="draw-scope" name="scope">${scopes.map(chapter => `<option value="${chapter}">${shuffleScope(chapter)}</option>`).join('')}</select></label>
+        ${listening ? '' : `<label for="draw-direction">答题方向 <select id="draw-direction" name="direction">${directions.map(direction => `<option value="${direction}">${mode[direction].label}</option>`).join('')}</select></label>`}
+        <label for="draw-size">题数 <select id="draw-size" name="size">${shuffleSizes.map(count => `<option value="${count}" ${count === 20 ? 'selected' : ''}>${count} 题</option>`).join('')}</select></label>
+        <button class="button primary" type="submit">${icon(listening ? 'headphones' : 'shuffle')} ${listening ? '开始听写' : '开始练习'}</button>
       </div>
     </form>
     ${rounds.length ? `<section class="settings-section"><h2>最近练习</h2>${rounds.join('')}</section>` : ''}`;
@@ -226,12 +231,13 @@ function shuffleView() {
 
 function runView() {
   const review = page.name === 'review';
-  const shuffle = page.name === 'shuffle';
+  const drawn = drawMode(page.name);
   const direction = page.direction;
+  const listening = direction === 'dictation';
   const key = `${page.name}:${page.id}:${direction}`;
   const existing = state.runs[key];
   if (!existing) {
-    if (shuffle) return shuffleView();
+    if (drawn) return drawView();
     const ids = review ? activeErrors(page.id, direction).map(error => error.word.id) : idsOf(units.get(page.id));
     if (!ids.length) return `<a class="back" href="#errors">${icon('arrow-left')} 返回错题本</a><h1>错题复测</h1><p class="empty">目前没有符合条件的错题。</p>`;
     startRun(state, key, direction, ids);
@@ -239,21 +245,25 @@ function runView() {
   }
   currentRun = { key, review };
   const run = state.runs[key];
-  const [back, backLabel, context] = shuffle ? ['#shuffle', '返回乱序练习', shuffleScope(page.id)]
+  const [back, backLabel, context] = drawn ? [`#${page.name}`, listening ? '返回听写' : '返回乱序练习', shuffleScope(page.id)]
     : review ? ['#errors', '返回错题本', '错题复测'] : [unitPath(page.id), '返回单元', unitName(page.id)];
+  const title = listening ? (review ? '听写复测' : '单词听写') : `${mode[direction].label}${drawn ? '乱序练习' : '默写'}`;
   const heading = `<a class="back" href="${back}">${icon('arrow-left')} ${backLabel}</a>
-    <section class="section-head"><div><p class="eyebrow">${context}</p><h1>${mode[direction].label}${shuffle ? '乱序练习' : '默写'}</h1></div>
-    ${review || shuffle ? '' : `<nav class="segments" aria-label="默写方向">${directions.map(option => `<a href="${unitPath(page.id, option)}" ${option === direction ? 'aria-current="page"' : ''}>${mode[option].label}</a>`).join('')}</nav>`}</section>`;
-  if (run.results) return heading + resultsView(run, shuffle);
+    <section class="section-head"><div><p class="eyebrow">${context}</p><h1>${title}</h1></div>
+    ${review || drawn ? '' : `<nav class="segments" aria-label="默写方向">${directions.map(option => `<a href="${unitPath(page.id, option)}" ${option === direction ? 'aria-current="page"' : ''}>${mode[option].label}</a>`).join('')}</nav>`}</section>`;
+  if (run.results) return heading + resultsView(run, drawn);
   const word = bank.words[run.ids[run.index]];
   const answered = run.ids.filter(id => run.drafts[id]?.trim()).length;
+  const prompt = listening
+    ? `<div class="question dictation-prompt"><button class="button audio" type="button" data-action="hear">${icon('volume-2')} 播放发音</button></div>`
+    : `<div class="question"><p class="eyebrow">${direction === 'zh-en' ? '中文释义' : '英文词条'}</p><div class="question-line"><h2 ${direction === 'en-zh' ? 'lang="en"' : ''}>${html(direction === 'zh-en' ? word.gloss : word.en)}</h2>${direction === 'en-zh' ? speechButton(word) : ''}</div></div>`;
   return heading + `
     <section class="exercise">
       <div class="exercise-progress"><span>第 <strong>${run.index + 1}</strong> / ${run.ids.length} 题</span><span id="answered">已填写 ${answered} 题</span></div>
       ${meter(run.index + 1, run.ids.length)}
-      <div class="question"><p class="eyebrow">${direction === 'zh-en' ? '中文释义' : '英文词条'}</p><div class="question-line"><h2 ${direction === 'en-zh' ? 'lang="en"' : ''}>${html(direction === 'zh-en' ? word.gloss : word.en)}</h2>${direction === 'en-zh' ? speechButton(word) : ''}</div></div>
+      ${prompt}
       <label for="answer">${mode[direction].input}</label>
-      <input id="answer" data-id="${word.id}" type="text" maxlength="300" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" lang="${direction === 'zh-en' ? 'en' : 'zh-CN'}" value="${html(run.drafts[word.id])}">
+      <input id="answer" data-id="${word.id}" type="text" maxlength="300" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" lang="${direction === 'en-zh' ? 'zh-CN' : 'en'}" value="${html(run.drafts[word.id])}">
       <div class="exercise-actions"><button class="button square" data-action="step" data-offset="-1" aria-label="上一题" title="上一题" ${run.index === 0 ? 'disabled' : ''}>${icon('arrow-left')}</button><button class="button" data-action="skip">跳过此题</button>
       ${run.index + 1 < run.ids.length ? `<button class="button primary" data-action="step" data-offset="1">下一题 ${icon('arrow-right')}</button>` : `<button class="button primary" data-action="submit">${icon('check')} 交卷核对</button>`}</div>
     </section>
@@ -263,7 +273,7 @@ function runView() {
 function resultsView(run, shuffle) {
   const tally = Object.values(run.results);
   return `<section class="result-section"><div class="section-head"><h2>交卷结果</h2><button class="button" data-action="restart">${icon(shuffle ? 'shuffle' : 'rotate-ccw')} ${shuffle ? '重新抽题' : '重练本组'}</button></div>
-    <div class="result-metrics">${Object.entries(resultLabel).map(([status, label]) => `<span class="${status}"><strong>${tally.filter(item => item === status).length}</strong> ${label}</span>`).join('')}</div>
+    <div class="result-metrics">${Object.entries(resultLabel).filter(([status]) => run.direction !== 'dictation' || status !== 'pending').map(([status, label]) => `<span class="${status}"><strong>${tally.filter(item => item === status).length}</strong> ${label}</span>`).join('')}</div>
     <div class="word-list">${run.ids.map(id => {
       const word = bank.words[id];
       const status = run.results[id];
@@ -280,10 +290,10 @@ function errorsView() {
   return `<section class="section-head"><div><p class="eyebrow">REVIEW / 错题复测</p><h1>错题本</h1></div><span class="total-label">${activeErrors().length} 道待复测</span></section>
     <div class="filter-row">
       <label class="select-label">单元 <select id="error-unit"><option value="0">全部单元</option>${[...units.keys()].map(id => `<option value="${id}" ${id === filter.unit ? 'selected' : ''}>${unitName(id)}</option>`).join('')}</select></label>
-      <label class="select-label">方向 <select id="error-direction"><option value="all">全部方向</option>${directions.map(direction => `<option value="${direction}" ${direction === filter.direction ? 'selected' : ''}>${mode[direction].label}</option>`).join('')}</select></label>
+      <label class="select-label">方向 <select id="error-direction"><option value="all">全部方向</option>${practiceDirections.map(direction => `<option value="${direction}" ${direction === filter.direction ? 'selected' : ''}>${mode[direction].label}</option>`).join('')}</select></label>
       <label class="check-label"><input id="error-history" type="checkbox" ${filter.history ? 'checked' : ''}>含已掌握</label>
     </div>
-    <div class="review-actions">${directions.filter(direction => filter.direction === 'all' || filter.direction === direction).map(direction => {
+    <div class="review-actions">${practiceDirections.filter(direction => filter.direction === 'all' || filter.direction === direction).map(direction => {
       const count = activeErrors(filter.unit, direction).length;
       const run = state.runs[`review:${filter.unit}:${direction}`];
       if (!count && !run) return '';
@@ -314,7 +324,8 @@ function render({ top = false } = {}) {
   const renderView = {
     home: homeView,
     unit: page.direction ? runView : previewView,
-    shuffle: page.direction ? runView : shuffleView,
+    shuffle: page.direction ? runView : drawView,
+    dictation: page.direction ? runView : drawView,
     review: runView,
     errors: errorsView,
     settings: settingsView,
@@ -327,6 +338,7 @@ function render({ top = false } = {}) {
 }
 
 function openRoute() {
+  if (page?.direction === 'dictation') stopSpeaking();
   page = route();
   if (page.name === 'unit' && state.lastUnit !== page.id) {
     state.lastUnit = page.id;
@@ -354,6 +366,7 @@ function activeRun() {
 function moveQuestion(index) {
   const run = activeRun();
   if (!run || run.results) return;
+  if (run.direction === 'dictation') stopSpeaking();
   run.index = Math.min(Math.max(index, 0), run.ids.length - 1);
   persist();
   const focusAnswer = document.activeElement?.id === 'answer';
@@ -364,6 +377,7 @@ function moveQuestion(index) {
 function submitRun() {
   const run = activeRun();
   if (!run || run.results) return;
+  if (run.direction === 'dictation') stopSpeaking();
   finishRun(state, run, bank.words, id => wordUnits.get(id), currentRun.review);
   persist();
   render({ top: true });
@@ -375,18 +389,19 @@ function skipQuestion() {
   delete run.drafts[run.ids[run.index]];
   if (run.index + 1 < run.ids.length) moveQuestion(run.index + 1);
   else {
+    if (run.direction === 'dictation') stopSpeaking();
     persist();
     render();
   }
 }
 
-function beginShuffle(chapter, direction, count) {
-  const key = shuffleKey(chapter, direction);
+function beginDraw(name, chapter, direction, count) {
+  const key = `${name}:${chapter}:${direction}`;
   const existing = state.runs[key];
   const start = () => {
     startRun(state, key, direction, shuffledIds(bank, chapter, count));
     persist();
-    const target = shufflePath(chapter, direction);
+    const target = drawPath(name, chapter, direction);
     if (location.hash === target) openRoute();
     else location.hash = target;
   };
@@ -408,11 +423,15 @@ function updateVoiceSource() {
   if (target) target.textContent = voiceSource();
 }
 
-function speak(word) {
-  const digest = recordedVoices[recordingAccent]?.[word.id];
+function stopSpeaking() {
   playingClip?.pause();
   playingClip = null;
   window.speechSynthesis?.cancel();
+}
+
+function speak(word) {
+  const digest = recordedVoices[recordingAccent]?.[word.id];
+  stopSpeaking();
   if (navigator.onLine && typeof digest === 'string' && /^[a-f0-9]{12}$/.test(digest)) {
     const clip = new Audio(`./audio/${recordingAccent}/${word.id}-${digest}.mp3`);
     playingClip = clip;
@@ -489,6 +508,10 @@ async function importData(file) {
 
 const actions = {
   speak: button => speak(bank.words[button.dataset.id]),
+  hear: () => {
+    const run = activeRun();
+    if (run?.direction === 'dictation' && !run.results) speak(bank.words[run.ids[run.index]]);
+  },
   sample: () => speak(bank.words[1]),
   preview: () => {
     if (state.preview[page.id]) delete state.preview[page.id];
@@ -511,8 +534,8 @@ const actions = {
   restart: () => {
     const run = activeRun();
     if (!run?.results) return;
-    if (page.name === 'shuffle') {
-      beginShuffle(page.id, page.direction, run.ids.length);
+    if (drawMode(page.name)) {
+      beginDraw(page.name, page.id, page.direction, run.ids.length);
       return;
     }
     const ids = currentRun.review ? activeErrors(page.id, page.direction).map(error => error.word.id) : run.ids;
@@ -561,14 +584,15 @@ document.addEventListener('click', event => {
 });
 
 document.addEventListener('submit', event => {
-  if (event.target.id !== 'shuffle-form') return;
+  const name = event.target.dataset.draw;
+  if (!drawMode(name)) return;
   event.preventDefault();
   const form = new FormData(event.target);
   const chapter = Number(form.get('scope'));
-  const direction = form.get('direction');
+  const direction = name === 'dictation' ? 'dictation' : form.get('direction');
   const count = Number(form.get('size'));
-  if (directions.includes(direction) && shuffleSizes.includes(count) && (chapter === 0 || bank.chapters.some(item => item.id === chapter))) {
-    beginShuffle(chapter, direction, count);
+  if (drawDirections(name).includes(direction) && shuffleSizes.includes(count) && (chapter === 0 || bank.chapters.some(item => item.id === chapter))) {
+    beginDraw(name, chapter, direction, count);
   }
 });
 

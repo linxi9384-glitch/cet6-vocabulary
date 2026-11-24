@@ -118,3 +118,37 @@ test('backup preserves shuffled IDs and rejects duplicates or wrong chapters', (
   run.ids.pop();
   assert.throws(parse);
 });
+
+test('dictation grades English spelling and tracks its own mistakes', () => {
+  const state = blankState();
+  const ids = shuffledIds(bank, 0, 10, () => 0);
+  const run = startRun(state, 'dictation:0:dictation', 'dictation', ids);
+  const [first, second] = ids;
+  run.drafts[first] = `  ${bank.words[first].en.toUpperCase()} `;
+  run.drafts[second] = 'intentionally misspelled';
+  assert.equal(checkAnswer(word, 'dictation', '  TAKE  PART IN  '), 'correct');
+  assert.deepEqual(Object.values(finishRun(state, run, bank.words, () => 1)).sort(),
+    ['correct', ...Array(8).fill('skipped'), 'wrong']);
+  assert.deepEqual(Object.keys(state.errors), [`dictation:${second}`]);
+  assert.equal(lessonProgress(state, ids, 'zh-en').answered, 0);
+  assert.equal(lessonProgress(state, ids, 'dictation').correct, 1);
+
+  const review = startRun(state, 'review:1:dictation', 'dictation', [second]);
+  review.drafts[second] = bank.words[second].en;
+  finishRun(state, review, bank.words, () => 1, true);
+  assert.equal(state.errors[`dictation:${second}`].active, false);
+  assert.deepEqual(parseBackup(JSON.stringify(makeBackup(state, bank)), bank), state);
+});
+
+test('backup rejects dictation rounds outside their chapter or under a translation route', () => {
+  const state = blankState();
+  const ids = shuffledIds(bank, 1, 10, () => 0);
+  const read = () => parseBackup(JSON.stringify(makeBackup(state, bank)), bank);
+  startRun(state, 'dictation:1:dictation', 'dictation', ids);
+  assert.deepEqual(read(), state);
+  startRun(state, 'dictation:2:dictation', 'dictation', ids);
+  assert.throws(read);
+  delete state.runs['dictation:2:dictation'];
+  startRun(state, 'shuffle:1:dictation', 'dictation', ids);
+  assert.throws(read);
+});

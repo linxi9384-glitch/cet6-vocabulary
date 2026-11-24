@@ -159,6 +159,9 @@ h3 { font-size: 15px; font-weight: 700; line-height: 1.4; }
 .question { min-height: 120px; padding: 24px 0; }
 .question-line { display: flex; align-items: center; gap: 10px; justify-content: space-between; }
 .question h2 { font-size: 26px; }
+.dictation-prompt { display: flex; align-items: center; }
+.dictation-prompt .audio { min-height: 52px; padding-inline: 19px; font-size: 16px; }
+.dictation-prompt .audio i { font-size: 20px; }
 .exercise label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 8px; }
 input[type="text"], input[type="search"], select { background: var(--paper); border: 1px solid #aebdb1; border-radius: 7px; min-height: 44px; padding: 0 11px; color: var(--ink); font-size: 16px; }
 .exercise input, #search-term { width: 100%; }
@@ -240,9 +243,11 @@ dialog::backdrop { background: #152e24a6; }
 
 @media (max-width: 470px) {
   .brand { min-height: 41px; }
-  .sidebar { justify-content: space-between; }
-  .nav a { padding-inline: 6px; }
+  .sidebar { justify-content: space-between; padding-inline: 8px; }
+  .nav { gap: 1px; }
+  .nav a { padding-inline: 4px; }
   .nav a i { display: none; }
+  .nav-count { display: none; }
   .breadcrumb, .topbar-tools { font-size: 11px; }
   .topbar-tools .search-button { min-height: 34px; padding-inline: 7px; font-size: 11px; gap: 5px; }
   .topbar-tools .search-button i { font-size: 13px; }
@@ -283,14 +288,16 @@ dialog::backdrop { background: #152e24a6; }
   .setting-row { flex-wrap: wrap; }
 }
 
+@media (max-width: 380px) {
+  .brand strong { display: none; }
+}
+
 @media (max-width: 345px) {
   .unit-grid { grid-template-columns: minmax(0, 1fr); }
   .sidebar { gap: 4px; padding-inline: 8px; }
-  .brand strong { font-size: 14px; }
   .brand-symbol { width: 30px; height: 30px; }
   .nav { gap: 1px; }
   .nav a { padding-inline: 2px; font-size: 11px; }
-  .nav-count { display: none; }
   .section-head { flex-wrap: wrap; }
   .topbar { flex-wrap: wrap; }
   .resume-band { min-height: 166px; }

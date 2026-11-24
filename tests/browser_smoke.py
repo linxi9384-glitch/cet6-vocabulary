@@ -1,5 +1,6 @@
 """Run against the local site: python tests/browser_smoke.py [screenshot-directory]."""
 
+import json
 from pathlib import Path
 import re
 import sys
@@ -96,6 +97,7 @@ def shuffle(context):
     page = context.new_page()
     page.goto(ROOT + "#shuffle/4/zh-en")
     expect(page.get_by_role("heading", name="乱序练习", exact=True)).to_be_visible()
+    page.wait_for_function("navigator.serviceWorker.controller !== null")
     page.get_by_label("出题范围").select_option("4")
     page.get_by_label("题数").select_option("10")
     page.get_by_role("button", name="开始练习", exact=True).click()
@@ -149,6 +151,70 @@ def shuffle(context):
     page.close()
 
 
+def dictation(context, screenshots=None):
+    page = context.new_page()
+    page.add_init_script("""
+        const BrowserAudio = window.Audio;
+        window.playedClips = [];
+        window.Audio = class extends BrowserAudio {
+            constructor(url) {
+                super(url);
+                this.addEventListener('playing', () => window.playedClips.push(this.src));
+            }
+        };
+    """)
+    bank = json.loads((Path(__file__).resolve().parents[1] / "site/bank.json").read_text(encoding="utf-8"))
+    page.goto(ROOT + "#settings")
+    expect(page.locator("#voice-source")).to_contain_text("Jamie")
+    open_page(page, page.get_by_role("link", name="听写", exact=True), "听写")
+    if screenshots:
+        page.screenshot(path=screenshots / "cet6-dictation-setup.png")
+    page.get_by_label("出题范围").select_option("2")
+    page.get_by_label("题数").select_option("10")
+    page.get_by_role("button", name="开始听写").click()
+    expect(page.get_by_role("heading", name="单词听写", exact=True)).to_be_visible()
+    prompt = page.locator(".question")
+    expect(prompt).to_have_text("播放发音")
+    answer = page.get_by_role("textbox", name="输入英文")
+    first_id = answer.get_attribute("data-id")
+    second_chapter = {str(id_) for unit in bank["chapters"][1]["units"] for block in unit["blocks"] for id_ in block["ids"]}
+    assert first_id in second_chapter
+    expect(prompt.get_by_text(bank["words"][first_id]["en"], exact=True)).to_have_count(0)
+    play = page.get_by_role("button", name="播放发音", exact=True)
+    play.click()
+    page.wait_for_function("(id) => window.playedClips[0]?.includes(`/audio/en-US/${id}-`)", arg=first_id)
+    play.click()
+    page.wait_for_function("window.playedClips.length === 2")
+    if screenshots:
+        page.screenshot(path=screenshots / "cet6-dictation-answer.png")
+    answer.fill("wrong dictation answer")
+    page.reload()
+    expect(answer).to_have_attribute("data-id", first_id)
+    expect(answer).to_have_value("wrong dictation answer")
+    page.get_by_role("button", name="下一题", exact=True).click()
+    second_id = answer.get_attribute("data-id")
+    assert second_id in second_chapter and second_id != first_id
+    answer.fill(f"  {bank['words'][second_id]['en'].upper()} ")
+    page.get_by_role("button", name="交卷核对", exact=True).click()
+    expect(page.get_by_text("1 答对", exact=True)).to_be_visible()
+    expect(page.get_by_text("1 答错", exact=True)).to_be_visible()
+    expect(page.get_by_text("8 未作答", exact=True)).to_be_visible()
+    expect(page.locator(".result-word").first.get_by_text(bank["words"][first_id]["en"], exact=True)).to_be_visible()
+
+    open_page(page, page.get_by_role("link", name=re.compile("^错题本")), "错题本")
+    page.get_by_label("方向").select_option("dictation")
+    expect(page.get_by_text("wrong dictation answer", exact=True)).to_be_visible()
+    open_page(page, page.get_by_role("button", name="听写复测 (1)", exact=True), "听写复测")
+    expect(prompt).to_have_text("播放发音")
+    expect(answer).to_have_attribute("data-id", first_id)
+    answer.fill(bank["words"][first_id]["en"])
+    page.get_by_role("button", name="交卷核对", exact=True).click()
+    expect(page.get_by_text("1 答对", exact=True)).to_be_visible()
+    open_page(page, page.get_by_role("link", name="返回错题本", exact=True), "错题本")
+    expect(page.get_by_text("0 道待复测", exact=True)).to_be_visible()
+    page.close()
+
+
 def device_layout(browser, screenshots):
     for width, height in [(820, 1180), (1180, 820), (390, 844), (320, 640)]:
         page = browser.new_page(viewport={"width": width, "height": height}, has_touch=True)
@@ -171,6 +237,10 @@ def device_layout(browser, screenshots):
         no_overflow(page)
         if screenshots and width in (820, 390):
             page.screenshot(path=screenshots / f"cet6-shuffle-{width}.png")
+        open_page(page, page.get_by_role("link", name="听写", exact=True), "听写")
+        page.get_by_role("button", name="开始听写", exact=True).click()
+        expect(page.get_by_role("button", name="播放发音", exact=True)).to_be_visible()
+        no_overflow(page)
         page.close()
 
 
@@ -180,6 +250,7 @@ if __name__ == "__main__":
         browser = playwright.chromium.launch()
         study(browser.new_context(viewport={"width": 1440, "height": 960}), screenshots)
         shuffle(browser.new_context(viewport={"width": 820, "height": 1180}))
+        dictation(browser.new_context(viewport={"width": 390, "height": 844}, has_touch=True), screenshots)
         device_layout(browser, screenshots)
         browser.close()
-    print("Verified study, shuffle, independent directions, retest, backup, offline reload and four touch viewport sizes.")
+    print("Verified study, shuffle, dictation audio, retest, backup, offline reload and four touch viewport sizes.")

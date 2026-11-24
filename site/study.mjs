@@ -1,4 +1,5 @@
 export const directions = ['zh-en', 'en-zh'];
+export const practiceDirections = [...directions, 'dictation'];
 export const shuffleSizes = [10, 20, 40];
 const submitted = ['correct', 'wrong'];
 const results = [...submitted, 'skipped', 'pending'];
@@ -24,7 +25,7 @@ export function chineseSenses(gloss) {
 
 export function checkAnswer(word, direction, answer) {
   if (!answer.trim()) return 'skipped';
-  if (direction === 'zh-en') {
+  if (direction === 'zh-en' || direction === 'dictation') {
     return [word.en, ...(word.variants ?? [])].some(value => english(value) === english(answer)) ? 'correct' : 'wrong';
   }
   const accepted = chineseSenses(word.gloss);
@@ -131,7 +132,7 @@ export function parseBackup(text, bank) {
   for (const [unit, value] of Object.entries(state.preview)) validate(wordsByUnit.has(Number(unit)) && date(value));
 
   function wordFromKey(key) {
-    const match = /^(zh-en|en-zh):([1-9]\d*)$/.exec(key);
+    const match = /^(zh-en|en-zh|dictation):([1-9]\d*)$/.exec(key);
     validate(match && unitIds.has(Number(match[2])));
     return Number(match[2]);
   }
@@ -147,17 +148,19 @@ export function parseBackup(text, bank) {
     validate(value.review === null || response(value.review));
   }
   for (const [key, run] of Object.entries(state.runs)) {
-    const match = /^(unit|review|shuffle):(0|[1-9]\d*):(zh-en|en-zh)$/.exec(key);
+    const match = /^(unit|review|shuffle|dictation):(0|[1-9]\d*):(zh-en|en-zh|dictation)$/.exec(key);
     validate(match && object(run) && run.direction === match[3] && Array.isArray(run.ids) && run.ids.length > 0);
-    const unit = Number(match[2]);
-    const expected = wordsByUnit.get(unit);
+    const [, type, scope, direction] = match;
+    const scopeId = Number(scope);
+    const expected = wordsByUnit.get(scopeId);
     validate(new Set(run.ids).size === run.ids.length && run.ids.every(id => unitIds.has(id)));
-    if (match[1] === 'unit') {
+    if (type !== 'review') validate((type === 'dictation') === (direction === 'dictation'));
+    if (type === 'unit') {
       validate(expected && run.ids.length === expected.length && run.ids.every((id, i) => id === expected[i]));
-    } else if (match[1] === 'shuffle') {
-      validate(shuffleSizes.includes(run.ids.length) && (unit === 0 || run.ids.every(id => unitChapters.get(unitIds.get(id)) === unit)));
+    } else if (type === 'shuffle' || type === 'dictation') {
+      validate(shuffleSizes.includes(run.ids.length) && (scopeId === 0 || run.ids.every(id => unitChapters.get(unitIds.get(id)) === scopeId)));
     } else {
-      validate(unit === 0 || (expected && run.ids.every(id => unitIds.get(id) === unit)));
+      validate(scopeId === 0 || (expected && run.ids.every(id => unitIds.get(id) === scopeId)));
     }
     validate(Number.isInteger(run.index) && run.index >= 0 && run.index < run.ids.length && object(run.drafts));
     const idKeys = new Set(run.ids.map(String));

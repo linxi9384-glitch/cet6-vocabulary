@@ -36,6 +36,8 @@ let currentRun;
 let toastTimer;
 let requestedWord;
 let storageProblem = false;
+let recordedVoices = {};
+let playingClip = null;
 let filter = { unit: 0, direction: 'all', history: false };
 
 function loadState() {
@@ -263,7 +265,7 @@ function errorsView() {
 
 function settingsView() {
   return `<section class="section-head"><div><p class="eyebrow">SETTINGS / 本机学习</p><h1>设置与备份</h1></div></section>
-    <section class="settings-section"><h2>发音</h2><div class="setting-row"><div><strong>偏好口音</strong><small>系统英语语音</small></div>
+    <section class="settings-section"><h2>发音</h2><div class="setting-row"><div><strong>偏好口音</strong><small id="voice-source">${voiceSource()}</small></div>
       <fieldset class="segments" aria-label="偏好口音">${[['en-US', '美音'], ['en-GB', '英音']].map(([value, label]) => `<label><input type="radio" name="voice" value="${value}" ${state.voice === value ? 'checked' : ''}><span>${label}</span></label>`).join('')}</fieldset>
       <button class="button" data-action="sample">${icon('volume-2')} 试听</button></div></section>
     <section class="settings-section"><h2>学习记录</h2><div class="setting-row"><div><strong>导出备份</strong><small>预习、默写进度和错题</small></div><button class="button" data-action="export">${icon('download')} 导出 JSON</button></div>
@@ -342,25 +344,54 @@ function skipQuestion() {
   }
 }
 
-function speak(text) {
+function voiceSource() {
+  return Object.keys(recordedVoices[state.voice] ?? {}).length
+    ? '豆包语音 · 未收录词条使用系统英语语音'
+    : '系统英语语音';
+}
+
+function updateVoiceSource() {
+  const target = document.querySelector('#voice-source');
+  if (target) target.textContent = voiceSource();
+}
+
+function speak(word) {
+  const accent = state.voice;
+  const digest = recordedVoices[accent]?.[word.id];
+  playingClip?.pause();
+  playingClip = null;
+  window.speechSynthesis?.cancel();
+  if (navigator.onLine && typeof digest === 'string' && /^[a-f0-9]{12}$/.test(digest)) {
+    const clip = new Audio(`./audio/${accent}/${word.id}-${digest}.mp3`);
+    playingClip = clip;
+    clip.play().catch(() => {
+      if (playingClip !== clip) return;
+      playingClip = null;
+      speakWithSystem(word.en, accent);
+    });
+    return;
+  }
+  speakWithSystem(word.en, accent);
+}
+
+function speakWithSystem(text, accent) {
   if (!('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)) {
     toast('此浏览器无法朗读。');
     return;
   }
   const englishVoices = speechSynthesis.getVoices().filter(voice => /^en(?:[-_]|$)/i.test(voice.lang));
-  const preferred = voice => voice.lang.replace('_', '-').toLowerCase() === state.voice.toLowerCase();
+  const preferred = voice => voice.lang.replace('_', '-').toLowerCase() === accent.toLowerCase();
   const voice = englishVoices.find(voice => preferred(voice) && voice.localService)
     ?? englishVoices.find(preferred)
     ?? englishVoices.find(voice => voice.localService)
     ?? englishVoices[0];
   const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = voice?.lang ?? state.voice;
+  utterance.lang = voice?.lang ?? accent;
   if (voice) utterance.voice = voice;
   utterance.rate = 0.88;
   utterance.onerror = event => {
     if (!['canceled', 'interrupted'].includes(event.error)) toast('未能朗读，请检查设备中的英语语音。');
   };
-  speechSynthesis.cancel();
   speechSynthesis.speak(utterance);
 }
 
@@ -409,8 +440,8 @@ async function importData(file) {
 }
 
 const actions = {
-  speak: button => speak(bank.words[button.dataset.id].en),
-  sample: () => speak('vocabulary'),
+  speak: button => speak(bank.words[button.dataset.id]),
+  sample: () => speak(bank.words[1]),
   preview: () => {
     if (state.preview[page.id]) delete state.preview[page.id];
     else state.preview[page.id] = new Date().toISOString();
@@ -504,6 +535,7 @@ document.addEventListener('change', event => {
   else if (input.name === 'voice') {
     state.voice = input.value;
     persist();
+    updateVoiceSource();
     return;
   } else if (input.id === 'import-file') {
     if (input.files[0]) importData(input.files[0]);
@@ -528,7 +560,7 @@ function prepareOffline() {
     return;
   }
   const setReady = () => {
-    offlineLabel = '已缓存，可离线打开。发音取决于系统语音。';
+    offlineLabel = '已缓存，可离线打开。离线发音取决于系统语音。';
     updateOfflineLabel();
   };
   const failed = () => {
@@ -569,6 +601,12 @@ async function main() {
     });
     prepareOffline();
     window.speechSynthesis?.getVoices();
+    fetch('./audio/manifest.json').then(response => response.ok ? response.json() : null).then(audio => {
+      if (audio?.edition === bank.edition && audio.clips) {
+        recordedVoices = audio.clips;
+        updateVoiceSource();
+      }
+    }).catch(() => {});
   } catch (error) {
     console.error(error);
     view.innerHTML = '<h1>词库暂时无法打开</h1><p>请检查网络后重新加载。</p><a class="button" href="./">重新加载</a>';

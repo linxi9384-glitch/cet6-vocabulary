@@ -202,6 +202,20 @@ input[type="text"], input[type="search"], select { background: var(--paper); bor
 .shuffle-options { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
 .shuffle-options label { display: grid; gap: 5px; color: var(--muted); font-size: 13px; }
 .shuffle-options button { min-height: 44px; }
+.reading-toolbar { display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: center; margin-bottom: 14px; }
+.reading-status { margin-bottom: 12px; }
+.reading-article, .reading-glossary { max-width: 760px; }
+.reading-article { padding-block: 20px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.reading-article h2 { font-family: Georgia, serif; font-size: 30px; margin-bottom: 16px; }
+.reading-body { font-family: Georgia, serif; font-size: 18px; line-height: 1.75; }
+.reading-body p + p { margin-top: 14px; }
+.reading-body mark { color: inherit; background: #f9eadc; box-decoration-break: clone; }
+.reading-glossary { margin-top: 14px; }
+.reading-glossary summary { cursor: pointer; min-height: 44px; padding: 10px 0; font-weight: 650; }
+.reading-glossary dl { margin: 0; border-top: 1px solid var(--line); }
+.reading-glossary dl div { display: grid; grid-template-columns: minmax(95px, .65fr) minmax(0, 1.35fr); gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.reading-glossary dt { font-weight: 650; }
+.reading-glossary dd { margin: 0; color: var(--muted); }
 .setting-row { display: flex; align-items: center; gap: 12px; padding: 14px 0; border-top: 1px solid var(--line); }
 .setting-row > div { margin-right: auto; }
 .setting-row small { display: block; margin-top: 4px; color: var(--muted); }
@@ -288,7 +302,7 @@ dialog::backdrop { background: #152e24a6; }
   .setting-row { flex-wrap: wrap; }
 }
 
-@media (max-width: 380px) {
+@media (max-width: 425px) {
   .brand strong { display: none; }
 }
 

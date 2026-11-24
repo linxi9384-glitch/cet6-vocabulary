@@ -2,6 +2,7 @@ import {
   assessAnswer, blankState, directions, finishRun, lessonProgress, makeBackup, parseBackup,
   practiceDirections, shuffledIds, shuffleSizes, startRun,
 } from './study.mjs';
+import { isReadingDate, readingDate, vocabularyMatches } from './reading.mjs';
 
 const storageKey = 'cet6.study.v1';
 const recordingAccent = 'en-US';
@@ -47,6 +48,8 @@ let storageProblem = false;
 let recordedVoices = {};
 let playingClip = null;
 let filter = { unit: 0, direction: 'all', history: false };
+let reading = null;
+let highlightReading = false;
 
 function loadState() {
   try {
@@ -86,6 +89,7 @@ function route() {
     return saved ? { name, id, direction: roundDirection } : { name };
   }
   if (name === 'errors' || name === 'settings') return { name };
+  if (name === 'reading') return { name, date: isReadingDate(raw) ? raw : null };
   const lastChapter = units.get(state.lastUnit)?.chapter ?? 1;
   return { name: 'home', chapter: bank.chapters.some(chapter => chapter.id === id) ? id : lastChapter };
 }
@@ -124,7 +128,7 @@ function updateShell() {
     if (link.dataset.nav === selected) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   }
-  const labels = { home: '单元目录', unit: unitName(page.id), shuffle: '乱序练习', dictation: '听写', errors: '错题本', review: '错题复测', settings: '设置与备份' };
+  const labels = { home: '单元目录', unit: unitName(page.id), shuffle: '乱序练习', dictation: '听写', reading: '每日阅读', errors: '错题本', review: '错题复测', settings: '设置与备份' };
   document.querySelector('#breadcrumb').innerHTML = `学习空间 ${icon('chevron-right')} <strong>${labels[page.name]}</strong>`;
 }
 
@@ -309,6 +313,72 @@ function errorsView() {
     }).join('')}</div>` : `<div class="empty">${icon('bookmark-check')}<h2>当前没有错题</h2><a class="button" href="#home">返回单元目录 ${icon('arrow-right')}</a></div>`}`;
 }
 
+function readingParagraph(text, words) {
+  if (!highlightReading) return html(text);
+  const matches = words.flatMap(word => vocabularyMatches(text, word))
+    .sort((a, b) => a.start - b.start || b.text.length - a.text.length);
+  let cursor = 0;
+  let output = '';
+  for (const match of matches) {
+    if (match.start < cursor) continue;
+    output += `${html(text.slice(cursor, match.start))}<mark>${html(match.text)}</mark>`;
+    cursor = match.start + match.text.length;
+  }
+  return output + html(text.slice(cursor));
+}
+
+function readingView() {
+  const heading = '<section class="section-head"><h1>每日阅读</h1></section>';
+  if (!reading) return `${heading}<p role="status">正在载入阅读…</p>`;
+  if (reading.error) return `${heading}<p role="status">暂时无法载入阅读。</p><button class="button" type="button" data-action="retry-reading">${icon('rotate-ccw')} 重试</button>`;
+  const { article, dates, today } = reading;
+  if (!article) return `${heading}<p role="status">首篇阅读尚未发布。</p>`;
+  const words = article.wordIds.map(id => bank.words[id]);
+  const missingToday = !page.date && article.date !== today;
+  return `${heading}
+    <div class="reading-toolbar">
+      <label class="select-label" for="reading-date">往期阅读
+        <select id="reading-date"><option value="" ${page.date ? '' : 'selected'}>最新阅读</option>${dates.map(date => `<option value="${date}" ${page.date === date ? 'selected' : ''}>${date}</option>`).join('')}</select>
+      </label>
+      <label class="check-label"><input id="reading-highlight" type="checkbox" ${highlightReading ? 'checked' : ''}>高亮词库词汇</label>
+    </div>
+    ${missingToday ? '<p class="reading-status muted" role="status">今日阅读尚未发布，以下为最新一期。</p>' : ''}
+    <article class="reading-article">
+      <p class="eyebrow"><time datetime="${article.date}">${article.date}</time> · ${article.wordCount} 词</p>
+      <h2 lang="en">${html(article.title)}</h2>
+      <div class="reading-body" lang="en">${article.paragraphs.map(text => `<p>${readingParagraph(text, words)}</p>`).join('')}</div>
+    </article>
+    <details class="reading-glossary"><summary>本篇词汇 · ${words.length} 个词条</summary>
+      <dl>${words.map(word => `<div><dt lang="en">${html(word.en)}</dt><dd>${html(word.gloss)}</dd></div>`).join('')}</dl>
+    </details>`;
+}
+
+async function loadReading(requestedPage) {
+  try {
+    const index = await fetch('./readings/index.json');
+    if (!index.ok) throw new Error('Reading index unavailable.');
+    const dates = (await index.json()).filter(isReadingDate).sort().reverse();
+    const today = readingDate();
+    const date = dates.includes(requestedPage.date) ? requestedPage.date : dates.find(day => day <= today);
+    let article = null;
+    if (date) {
+      const response = await fetch(`./readings/${date}.json`);
+      if (!response.ok) throw new Error('Passage unavailable.');
+      article = await response.json();
+      if (article.date !== date || typeof article.title !== 'string'
+        || !Array.isArray(article.paragraphs) || !article.paragraphs.every(text => typeof text === 'string')
+        || !Number.isInteger(article.wordCount) || !Array.isArray(article.wordIds) || article.wordIds.length !== 100
+        || new Set(article.wordIds).size !== 100 || !article.wordIds.every(id => Number.isInteger(id) && bank.words[id])) {
+        throw new Error('Invalid passage.');
+      }
+    }
+    if (page === requestedPage) reading = { article, dates, today };
+  } catch {
+    if (page === requestedPage) reading = { error: true };
+  }
+  if (page === requestedPage) render();
+}
+
 function settingsView() {
   return `<section class="section-head"><div><p class="eyebrow">SETTINGS / 本机学习</p><h1>设置与备份</h1></div></section>
     <section class="settings-section"><h2>发音</h2><div class="setting-row"><div><strong>美式英语</strong><small id="voice-source">${voiceSource()}</small></div>
@@ -326,6 +396,7 @@ function render({ top = false } = {}) {
     unit: page.direction ? runView : previewView,
     shuffle: page.direction ? runView : drawView,
     dictation: page.direction ? runView : drawView,
+    reading: readingView,
     review: runView,
     errors: errorsView,
     settings: settingsView,
@@ -340,6 +411,10 @@ function render({ top = false } = {}) {
 function openRoute() {
   if (page?.direction === 'dictation') stopSpeaking();
   page = route();
+  if (page.name === 'reading') {
+    reading = null;
+    loadReading(page);
+  }
   if (page.name === 'unit' && state.lastUnit !== page.id) {
     state.lastUnit = page.id;
     persist();
@@ -513,6 +588,7 @@ const actions = {
     if (run?.direction === 'dictation' && !run.results) speak(bank.words[run.ids[run.index]]);
   },
   sample: () => speak(bank.words[1]),
+  'retry-reading': () => openRoute(),
   preview: () => {
     if (state.preview[page.id]) delete state.preview[page.id];
     else state.preview[page.id] = new Date().toISOString();
@@ -620,6 +696,12 @@ document.addEventListener('change', event => {
   if (input.id === 'error-unit') filter.unit = Number(input.value);
   else if (input.id === 'error-direction') filter.direction = input.value;
   else if (input.id === 'error-history') filter.history = input.checked;
+  else if (input.id === 'reading-highlight') highlightReading = input.checked;
+  else if (input.id === 'reading-date') {
+    const date = input.value;
+    location.hash = isReadingDate(date) ? `#reading/${date}` : '#reading';
+    return;
+  }
   else if (input.id === 'import-file') {
     if (input.files[0]) importData(input.files[0]);
     input.value = '';

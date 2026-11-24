@@ -244,6 +244,32 @@ def device_layout(browser, screenshots):
         page.close()
 
 
+def reading(context, screenshots=None):
+    page = context.new_page()
+    page.goto(ROOT + "#reading")
+    page.wait_for_function("navigator.serviceWorker.controller !== null")
+    page.reload()
+    article = page.locator(".reading-article")
+    expect(article.locator("h2")).to_be_visible()
+    assert article.locator(".reading-body p").count() >= 3
+    date = article.locator("time").get_attribute("datetime")
+    expect(article.locator("mark")).to_have_count(0)
+    page.get_by_role("checkbox", name="高亮词库词汇").check()
+    expect(article.locator("mark").first).to_be_visible()
+    page.get_by_text("本篇词汇 · 100 个词条", exact=True).click()
+    expect(page.locator(".reading-glossary dt")).to_have_count(100)
+    page.get_by_label("往期阅读").select_option(date)
+    expect(article.locator("time")).to_have_text(date)
+    assert page.url.endswith(f"#reading/{date}")
+    no_overflow(page)
+    if screenshots:
+        page.screenshot(path=screenshots / "cet6-reading.png")
+    context.set_offline(True)
+    assert page.reload().from_service_worker
+    expect(article.locator("time")).to_have_text(date)
+    page.close()
+
+
 if __name__ == "__main__":
     screenshots = Path(sys.argv[1]) if len(sys.argv) > 1 else None
     with sync_playwright() as playwright:
@@ -251,6 +277,7 @@ if __name__ == "__main__":
         study(browser.new_context(viewport={"width": 1440, "height": 960}), screenshots)
         shuffle(browser.new_context(viewport={"width": 820, "height": 1180}))
         dictation(browser.new_context(viewport={"width": 390, "height": 844}, has_touch=True), screenshots)
+        reading(browser.new_context(viewport={"width": 390, "height": 844}, has_touch=True), screenshots)
         device_layout(browser, screenshots)
         browser.close()
-    print("Verified study, shuffle, dictation audio, retest, backup, offline reload and four touch viewport sizes.")
+    print("Verified study, shuffle, dictation audio, daily reading, retest, backup, offline reload and four touch viewport sizes.")

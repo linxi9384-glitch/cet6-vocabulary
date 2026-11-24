@@ -1,11 +1,22 @@
-const cacheName = 'cet6-study-v6';
+const cacheName = 'cet6-study-v7';
 const assets = [
-  './', './index.html', './style.css', './app.mjs', './study.mjs', './bank.json',
+  './', './index.html', './style.css', './app.mjs', './study.mjs', './reading.mjs', './bank.json',
   './manifest.webmanifest', './app-192.png', './app-512.png', './book-cover.png',
   './font/lucide.css', './font/lucide.woff2?t=1733401308309',
 ];
 const shell = new URL('./index.html', self.registration.scope).href;
 const assetUrls = new Set(assets.map(asset => new URL(asset, self.registration.scope).href));
+
+async function fetchReading(request) {
+  const cache = await caches.open(cacheName);
+  try {
+    const response = await fetch(request, { cache: 'no-cache' });
+    if (response.ok) await cache.put(request, response.clone()).catch(() => {});
+    return response;
+  } catch {
+    return (await cache.match(request)) ?? Response.error();
+  }
+}
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(cacheName).then(cache => cache.addAll(assets)).then(() => self.skipWaiting()));
@@ -24,5 +35,7 @@ self.addEventListener('fetch', event => {
     event.respondWith(caches.open(cacheName).then(cache => cache.match(shell)).then(response => response ?? fetch(request)));
   } else if (assetUrls.has(request.url)) {
     event.respondWith(caches.open(cacheName).then(cache => cache.match(request)).then(response => response ?? fetch(request)));
+  } else if (/^readings\/(?:index|\d{4}-\d{2}-\d{2})\.json$/.test(request.url.slice(self.registration.scope.length))) {
+    event.respondWith(fetchReading(request));
   }
 });

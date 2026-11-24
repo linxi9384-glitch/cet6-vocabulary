@@ -10,4 +10,4 @@
 
 运行 `node --test tests/study.test.mjs` 验证词库结构、判题、错题和备份。重新生成词库时运行 `python scripts/export_bank.py <原始CSV> <原词本work目录>`。原词本的序号、分组、释义和附注沿用到网页。修改应用资源后，同步更新 `site/sw.js` 的缓存版本。
 
-豆包语音的词条音频由 `python scripts/generate_audio.py --id 1` 生成，脚本会在终端隐藏密钥输入。`--accent` 可选 `en-US` 或 `en-GB`。试听并确认口音后，可用 `--all` 为该口音生成其余词条，接口按生成音频时长计费。网站播放 `site/audio/` 中已有的 MP3，离线或没有对应录音时使用系统英语语音。
+词条发音使用豆包语音合成 3.0 的美音 Jamie。运行 `python scripts/generate_audio.py --id 1` 生成单条音频，脚本会在终端隐藏密钥输入。`--all` 补齐缺失词条。网站播放 `site/audio/` 中已有的 MP3，离线时可使用设备自带的美式英语语音。

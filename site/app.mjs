@@ -3,6 +3,7 @@ import {
 } from './study.mjs';
 
 const storageKey = 'cet6.study.v1';
+const recordingAccent = 'en-US';
 const view = document.querySelector('#view');
 const dialog = document.querySelector('#dialog');
 const notice = document.querySelector('#notice');
@@ -265,8 +266,7 @@ function errorsView() {
 
 function settingsView() {
   return `<section class="section-head"><div><p class="eyebrow">SETTINGS / 本机学习</p><h1>设置与备份</h1></div></section>
-    <section class="settings-section"><h2>发音</h2><div class="setting-row"><div><strong>偏好口音</strong><small id="voice-source">${voiceSource()}</small></div>
-      <fieldset class="segments" aria-label="偏好口音">${[['en-US', '美音'], ['en-GB', '英音']].map(([value, label]) => `<label><input type="radio" name="voice" value="${value}" ${state.voice === value ? 'checked' : ''}><span>${label}</span></label>`).join('')}</fieldset>
+    <section class="settings-section"><h2>发音</h2><div class="setting-row"><div><strong>美式英语</strong><small id="voice-source">${voiceSource()}</small></div>
       <button class="button" data-action="sample">${icon('volume-2')} 试听</button></div></section>
     <section class="settings-section"><h2>学习记录</h2><div class="setting-row"><div><strong>导出备份</strong><small>预习、默写进度和错题</small></div><button class="button" data-action="export">${icon('download')} 导出 JSON</button></div>
       <div class="setting-row"><div><strong>导入备份</strong><small>用备份替换当前记录</small></div><input id="import-file" type="file" accept="application/json,.json" hidden><button class="button" data-action="import">${icon('upload')} 选择备份</button></div></section>
@@ -345,9 +345,9 @@ function skipQuestion() {
 }
 
 function voiceSource() {
-  return Object.keys(recordedVoices[state.voice] ?? {}).length
-    ? '豆包语音 · 未收录词条使用系统英语语音'
-    : '系统英语语音';
+  return Object.keys(recordedVoices[recordingAccent] ?? {}).length
+    ? '豆包语音合成 3.0 · Jamie'
+    : '系统美式英语语音';
 }
 
 function updateVoiceSource() {
@@ -356,37 +356,32 @@ function updateVoiceSource() {
 }
 
 function speak(word) {
-  const accent = state.voice;
-  const digest = recordedVoices[accent]?.[word.id];
+  const digest = recordedVoices[recordingAccent]?.[word.id];
   playingClip?.pause();
   playingClip = null;
   window.speechSynthesis?.cancel();
   if (navigator.onLine && typeof digest === 'string' && /^[a-f0-9]{12}$/.test(digest)) {
-    const clip = new Audio(`./audio/${accent}/${word.id}-${digest}.mp3`);
+    const clip = new Audio(`./audio/${recordingAccent}/${word.id}-${digest}.mp3`);
     playingClip = clip;
     clip.play().catch(() => {
       if (playingClip !== clip) return;
       playingClip = null;
-      speakWithSystem(word.en, accent);
+      speakWithSystem(word.en);
     });
     return;
   }
-  speakWithSystem(word.en, accent);
+  speakWithSystem(word.en);
 }
 
-function speakWithSystem(text, accent) {
+function speakWithSystem(text) {
   if (!('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)) {
     toast('此浏览器无法朗读。');
     return;
   }
-  const englishVoices = speechSynthesis.getVoices().filter(voice => /^en(?:[-_]|$)/i.test(voice.lang));
-  const preferred = voice => voice.lang.replace('_', '-').toLowerCase() === accent.toLowerCase();
-  const voice = englishVoices.find(voice => preferred(voice) && voice.localService)
-    ?? englishVoices.find(preferred)
-    ?? englishVoices.find(voice => voice.localService)
-    ?? englishVoices[0];
+  const americanVoices = speechSynthesis.getVoices().filter(voice => /^en[-_]US$/i.test(voice.lang));
+  const voice = americanVoices.find(voice => voice.localService) ?? americanVoices[0];
   const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = voice?.lang ?? accent;
+  utterance.lang = recordingAccent;
   if (voice) utterance.voice = voice;
   utterance.rate = 0.88;
   utterance.onerror = event => {
@@ -532,12 +527,7 @@ document.addEventListener('change', event => {
   if (input.id === 'error-unit') filter.unit = Number(input.value);
   else if (input.id === 'error-direction') filter.direction = input.value;
   else if (input.id === 'error-history') filter.history = input.checked;
-  else if (input.name === 'voice') {
-    state.voice = input.value;
-    persist();
-    updateVoiceSource();
-    return;
-  } else if (input.id === 'import-file') {
+  else if (input.id === 'import-file') {
     if (input.files[0]) importData(input.files[0]);
     input.value = '';
     return;

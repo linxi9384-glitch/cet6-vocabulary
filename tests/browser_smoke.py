@@ -92,6 +92,63 @@ def study(context, screenshots):
     assert not errors, errors
 
 
+def shuffle(context):
+    page = context.new_page()
+    page.goto(ROOT + "#shuffle/4/zh-en")
+    expect(page.get_by_role("heading", name="乱序练习", exact=True)).to_be_visible()
+    page.get_by_label("出题范围").select_option("4")
+    page.get_by_label("题数").select_option("10")
+    page.get_by_role("button", name="开始练习", exact=True).click()
+    expect(page.get_by_role("heading", name="中译英乱序练习", exact=True)).to_be_visible()
+    answer = page.get_by_role("textbox", name="输入英文")
+    first_id = answer.get_attribute("data-id")
+    answer.fill("wrong shuffle answer")
+    page.get_by_role("button", name="下一题", exact=True).click()
+    expect(page.get_by_text("第 2 / 10 题", exact=True)).to_be_visible()
+    second_id = answer.get_attribute("data-id")
+    assert first_id != second_id
+    page.reload()
+    expect(answer).to_have_attribute("data-id", second_id)
+    page.get_by_role("button", name="上一题", exact=True).click()
+    expect(answer).to_have_attribute("data-id", first_id)
+    expect(answer).to_have_value("wrong shuffle answer")
+
+    open_page(page, page.get_by_role("link", name="返回乱序练习", exact=True), "乱序练习")
+    page.get_by_label("出题范围").select_option("4")
+    page.get_by_role("button", name="开始练习", exact=True).click()
+    expect(page.get_by_role("dialog", name="开始新一轮")).to_be_visible()
+    page.get_by_role("button", name="取消", exact=True).click()
+    open_page(page, page.get_by_role("link", name="继续答题", exact=True), "中译英乱序练习")
+    expect(answer).to_have_value("wrong shuffle answer")
+    context.set_offline(True)
+    assert page.reload().from_service_worker
+    expect(answer).to_have_value("wrong shuffle answer")
+    page.get_by_role("button", name="交卷核对", exact=True).click()
+    expect(page.get_by_text("1 答错", exact=True)).to_be_visible()
+    expect(page.get_by_text("9 未作答", exact=True)).to_be_visible()
+    open_page(page, page.get_by_role("link", name=re.compile("^错题本")), "错题本")
+    expect(page.get_by_text("wrong shuffle answer", exact=True)).to_be_visible()
+    expect(page.locator(".result-row").get_by_role("link", name=re.compile(r"第 (49|5\d|6[0-4]) 单元"))).to_be_visible()
+
+    open_page(page, page.get_by_role("link", name="乱序练习", exact=True), "乱序练习")
+    open_page(page, page.get_by_role("link", name="查看结果", exact=True), "中译英乱序练习")
+    page.get_by_role("button", name="重新抽题", exact=True).click()
+    expect(page.get_by_text("第 1 / 10 题", exact=True)).to_be_visible()
+    expect(answer).to_have_value("")
+    open_page(page, page.get_by_role("link", name="返回乱序练习", exact=True), "乱序练习")
+    page.get_by_label("答题方向").select_option("en-zh")
+    page.get_by_role("button", name="开始练习", exact=True).click()
+    expect(page.get_by_role("heading", name="英译中乱序练习", exact=True)).to_be_visible()
+    expect(page.get_by_text("第 1 / 20 题", exact=True)).to_be_visible()
+    expect(page.get_by_role("button", name=re.compile("^朗读 "))).to_be_visible()
+    page.get_by_role("textbox", name="输入中文").fill("wrong shuffle answer")
+    page.get_by_role("button", name="交卷核对", exact=True).click()
+    expect(page.get_by_text("1 待自评", exact=True)).to_be_visible()
+    page.get_by_role("button", name="判为对", exact=True).click()
+    expect(page.get_by_text("1 答对", exact=True)).to_be_visible()
+    page.close()
+
+
 def device_layout(browser, screenshots):
     for width, height in [(820, 1180), (1180, 820), (390, 844), (320, 640)]:
         page = browser.new_page(viewport={"width": width, "height": height}, has_touch=True)
@@ -110,6 +167,10 @@ def device_layout(browser, screenshots):
         page.goto(ROOT + "#unit/64/en-zh")
         expect(page.get_by_role("textbox", name="输入中文")).to_be_visible()
         no_overflow(page)
+        open_page(page, page.get_by_role("link", name="乱序练习", exact=True), "乱序练习")
+        no_overflow(page)
+        if screenshots and width in (820, 390):
+            page.screenshot(path=screenshots / f"cet6-shuffle-{width}.png")
         page.close()
 
 
@@ -118,6 +179,7 @@ if __name__ == "__main__":
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch()
         study(browser.new_context(viewport={"width": 1440, "height": 960}), screenshots)
+        shuffle(browser.new_context(viewport={"width": 820, "height": 1180}))
         device_layout(browser, screenshots)
         browser.close()
-    print("Verified study, independent directions, retest, backup, offline reload and four touch viewport sizes.")
+    print("Verified study, shuffle, independent directions, retest, backup, offline reload and four touch viewport sizes.")

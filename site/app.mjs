@@ -1,5 +1,6 @@
 import {
-  assessAnswer, blankState, directions, finishRun, lessonProgress, makeBackup, parseBackup, startRun,
+  assessAnswer, blankState, directions, finishRun, lessonProgress, makeBackup, parseBackup,
+  shuffledIds, shuffleSizes, startRun,
 } from './study.mjs';
 
 const storageKey = 'cet6.study.v1';
@@ -22,6 +23,10 @@ const html = value => String(value ?? '').replace(/[&<>"']/g, char => ({
 const idsOf = unit => unit.blocks.flatMap(block => block.ids);
 const unitPath = (id, direction) => `#unit/${id}${direction ? `/${direction}` : ''}`;
 const reviewPath = (unit, direction) => `#review/${unit}/${direction}`;
+const shufflePath = (chapter, direction) => `#shuffle/${chapter}/${direction}`;
+const shuffleKey = (chapter, direction) => `shuffle:${chapter}:${direction}`;
+const shuffleScope = chapter => chapter ? chapterNames[chapter - 1] : '全词库';
+const needsAssessment = run => Object.values(run.results).includes('pending');
 const displayDate = value => new Date(value).toLocaleString('zh-CN', {
   month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
 });
@@ -73,6 +78,10 @@ function route() {
   const id = Number(raw);
   if (name === 'unit' && units.has(id)) return { name, id, direction: directions.includes(direction) ? direction : null };
   if (name === 'review' && (id === 0 || units.has(id)) && directions.includes(direction)) return { name, id, direction };
+  if (name === 'shuffle') {
+    const saved = raw === String(id) && directions.includes(direction) && state.runs[shuffleKey(id, direction)];
+    return saved ? { name, id, direction } : { name };
+  }
   if (name === 'errors' || name === 'settings') return { name };
   const lastChapter = units.get(state.lastUnit)?.chapter ?? 1;
   return { name: 'home', chapter: bank.chapters.some(chapter => chapter.id === id) ? id : lastChapter };
@@ -112,7 +121,7 @@ function updateShell() {
     if (link.dataset.nav === selected) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   }
-  const labels = { home: '单元目录', unit: unitName(page.id), errors: '错题本', review: '错题复测', settings: '设置与备份' };
+  const labels = { home: '单元目录', unit: unitName(page.id), shuffle: '乱序练习', errors: '错题本', review: '错题复测', settings: '设置与备份' };
   document.querySelector('#breadcrumb').innerHTML = `学习空间 ${icon('chevron-right')} <strong>${labels[page.name]}</strong>`;
 }
 
@@ -192,24 +201,50 @@ function previewView() {
     </section>`;
 }
 
+function shuffleView() {
+  const scopes = [0, ...bank.chapters.map(chapter => chapter.id)];
+  const rounds = scopes.flatMap(chapter => directions.flatMap(direction => {
+    const run = state.runs[shuffleKey(chapter, direction)];
+    if (!run) return [];
+    const label = !run.results ? '继续答题' : needsAssessment(run) ? '继续自评' : '查看结果';
+    const status = !run.results ? `第 ${run.index + 1} / ${run.ids.length} 题` : `${run.ids.length} 题`;
+    return `<div class="setting-row"><div><strong>${shuffleScope(chapter)} · ${mode[direction].label}</strong><small>${status}</small></div>
+      <a class="button" href="${shufflePath(chapter, direction)}">${label} ${icon('arrow-right')}</a></div>`;
+  }));
+  return `<section class="section-head"><h1>乱序练习</h1></section>
+    <form id="shuffle-form" class="shuffle-form" aria-labelledby="shuffle-form-title">
+      <h2 id="shuffle-form-title">新一轮</h2>
+      <div class="shuffle-options">
+        <label for="shuffle-scope">出题范围 <select id="shuffle-scope" name="scope">${scopes.map(chapter => `<option value="${chapter}">${shuffleScope(chapter)}</option>`).join('')}</select></label>
+        <label for="shuffle-direction">答题方向 <select id="shuffle-direction" name="direction">${directions.map(direction => `<option value="${direction}">${mode[direction].label}</option>`).join('')}</select></label>
+        <label for="shuffle-size">题数 <select id="shuffle-size" name="size">${shuffleSizes.map(count => `<option value="${count}" ${count === 20 ? 'selected' : ''}>${count} 题</option>`).join('')}</select></label>
+        <button class="button primary" type="submit">${icon('shuffle')} 开始练习</button>
+      </div>
+    </form>
+    ${rounds.length ? `<section class="settings-section"><h2>最近练习</h2>${rounds.join('')}</section>` : ''}`;
+}
+
 function runView() {
   const review = page.name === 'review';
+  const shuffle = page.name === 'shuffle';
   const direction = page.direction;
   const key = `${page.name}:${page.id}:${direction}`;
   const existing = state.runs[key];
-  const ids = review ? activeErrors(page.id, direction).map(error => error.word.id) : idsOf(units.get(page.id));
-  if (!existing && !ids.length) return `<a class="back" href="#errors">${icon('arrow-left')} 返回错题本</a><h1>错题复测</h1><p class="empty">目前没有符合条件的错题。</p>`;
-  currentRun = { key, review };
   if (!existing) {
+    if (shuffle) return shuffleView();
+    const ids = review ? activeErrors(page.id, direction).map(error => error.word.id) : idsOf(units.get(page.id));
+    if (!ids.length) return `<a class="back" href="#errors">${icon('arrow-left')} 返回错题本</a><h1>错题复测</h1><p class="empty">目前没有符合条件的错题。</p>`;
     startRun(state, key, direction, ids);
     persist();
   }
+  currentRun = { key, review };
   const run = state.runs[key];
-  const back = review ? '#errors' : unitPath(page.id);
-  const heading = `<a class="back" href="${back}">${icon('arrow-left')} ${review ? '返回错题本' : '返回单元'}</a>
-    <section class="section-head"><div><p class="eyebrow">${review ? '错题复测' : unitName(page.id)}</p><h1>${mode[direction].label}默写</h1></div>
-    ${review ? '' : `<nav class="segments" aria-label="默写方向">${directions.map(option => `<a href="${unitPath(page.id, option)}" ${option === direction ? 'aria-current="page"' : ''}>${mode[option].label}</a>`).join('')}</nav>`}</section>`;
-  if (run.results) return heading + resultsView(run);
+  const [back, backLabel, context] = shuffle ? ['#shuffle', '返回乱序练习', shuffleScope(page.id)]
+    : review ? ['#errors', '返回错题本', '错题复测'] : [unitPath(page.id), '返回单元', unitName(page.id)];
+  const heading = `<a class="back" href="${back}">${icon('arrow-left')} ${backLabel}</a>
+    <section class="section-head"><div><p class="eyebrow">${context}</p><h1>${mode[direction].label}${shuffle ? '乱序练习' : '默写'}</h1></div>
+    ${review || shuffle ? '' : `<nav class="segments" aria-label="默写方向">${directions.map(option => `<a href="${unitPath(page.id, option)}" ${option === direction ? 'aria-current="page"' : ''}>${mode[option].label}</a>`).join('')}</nav>`}</section>`;
+  if (run.results) return heading + resultsView(run, shuffle);
   const word = bank.words[run.ids[run.index]];
   const answered = run.ids.filter(id => run.drafts[id]?.trim()).length;
   return heading + `
@@ -225,9 +260,9 @@ function runView() {
     <div class="exercise-footer"><nav class="question-index" aria-label="题号">${run.ids.map((id, index) => `<button type="button" class="${run.drafts[id]?.trim() ? 'filled' : ''}" data-action="question" data-index="${index}" ${index === run.index ? 'aria-current="step"' : ''} aria-label="第 ${index + 1} 题">${index + 1}</button>`).join('')}</nav>${run.index + 1 < run.ids.length ? `<button class="button" data-action="submit">${icon('check')} 交卷核对</button>` : ''}</div>`;
 }
 
-function resultsView(run) {
+function resultsView(run, shuffle) {
   const tally = Object.values(run.results);
-  return `<section class="result-section"><div class="section-head"><h2>交卷结果</h2><button class="button" data-action="restart">${icon('rotate-ccw')} 重练本组</button></div>
+  return `<section class="result-section"><div class="section-head"><h2>交卷结果</h2><button class="button" data-action="restart">${icon(shuffle ? 'shuffle' : 'rotate-ccw')} ${shuffle ? '重新抽题' : '重练本组'}</button></div>
     <div class="result-metrics">${Object.entries(resultLabel).map(([status, label]) => `<span class="${status}"><strong>${tally.filter(item => item === status).length}</strong> ${label}</span>`).join('')}</div>
     <div class="word-list">${run.ids.map(id => {
       const word = bank.words[id];
@@ -279,6 +314,7 @@ function render({ top = false } = {}) {
   const renderView = {
     home: homeView,
     unit: page.direction ? runView : previewView,
+    shuffle: page.direction ? runView : shuffleView,
     review: runView,
     errors: errorsView,
     settings: settingsView,
@@ -341,6 +377,23 @@ function skipQuestion() {
   else {
     persist();
     render();
+  }
+}
+
+function beginShuffle(chapter, direction, count) {
+  const key = shuffleKey(chapter, direction);
+  const existing = state.runs[key];
+  const start = () => {
+    startRun(state, key, direction, shuffledIds(bank, chapter, count));
+    persist();
+    const target = shufflePath(chapter, direction);
+    if (location.hash === target) openRoute();
+    else location.hash = target;
+  };
+  if (existing && (!existing.results || needsAssessment(existing))) {
+    showDialog('开始新一轮', '<p>新一轮会替换本范围和方向下尚未完成的练习。</p><div class="dialog-actions"><button class="button" data-action="close">取消</button><button class="button primary" data-action="confirm">重新抽题</button></div>', start);
+  } else {
+    start();
   }
 }
 
@@ -458,6 +511,10 @@ const actions = {
   restart: () => {
     const run = activeRun();
     if (!run?.results) return;
+    if (page.name === 'shuffle') {
+      beginShuffle(page.id, page.direction, run.ids.length);
+      return;
+    }
     const ids = currentRun.review ? activeErrors(page.id, page.direction).map(error => error.word.id) : run.ids;
     startRun(state, currentRun.key, page.direction, ids.length ? ids : run.ids);
     persist();
@@ -501,6 +558,18 @@ const actions = {
 document.addEventListener('click', event => {
   const button = event.target.closest('button[data-action]');
   if (bank && button) actions[button.dataset.action]?.(button);
+});
+
+document.addEventListener('submit', event => {
+  if (event.target.id !== 'shuffle-form') return;
+  event.preventDefault();
+  const form = new FormData(event.target);
+  const chapter = Number(form.get('scope'));
+  const direction = form.get('direction');
+  const count = Number(form.get('size'));
+  if (directions.includes(direction) && shuffleSizes.includes(count) && (chapter === 0 || bank.chapters.some(item => item.id === chapter))) {
+    beginShuffle(chapter, direction, count);
+  }
 });
 
 document.addEventListener('input', event => {

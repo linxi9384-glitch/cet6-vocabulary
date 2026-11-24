@@ -1,4 +1,5 @@
 export const directions = ['zh-en', 'en-zh'];
+export const shuffleSizes = [10, 20, 40];
 const submitted = ['correct', 'wrong'];
 const results = [...submitted, 'skipped', 'pending'];
 const answerLimit = 300;
@@ -62,6 +63,17 @@ export function startRun(state, key, direction, ids) {
   return run;
 }
 
+export function shuffledIds(bank, chapterId, count, random = Math.random) {
+  const chapters = chapterId === 0 ? bank.chapters : bank.chapters.filter(chapter => chapter.id === chapterId);
+  const ids = chapters.flatMap(chapter => chapter.units.flatMap(unit => unit.blocks.flatMap(block => block.ids)));
+  if (!shuffleSizes.includes(count) || count > ids.length) throw new RangeError('Invalid shuffle scope or size.');
+  for (let index = 0; index < count; index += 1) {
+    const other = index + Math.floor(random() * (ids.length - index));
+    [ids[index], ids[other]] = [ids[other], ids[index]];
+  }
+  return ids.slice(0, count);
+}
+
 export function finishRun(state, run, words, unitFor, review = false) {
   if (run.results) return run.results;
   run.results = {};
@@ -103,11 +115,13 @@ export function parseBackup(text, bank) {
   validate(object(backup) && backup.format === 'cet6-study' && backup.version === 1 && backup.edition === bank.edition);
   const { state } = backup;
   const unitIds = new Map();
+  const unitChapters = new Map();
   const wordsByUnit = new Map();
   for (const chapter of bank.chapters) {
     for (const unit of chapter.units) {
       const ids = unit.blocks.flatMap(block => block.ids);
       wordsByUnit.set(unit.id, ids);
+      unitChapters.set(unit.id, chapter.id);
       for (const id of ids) unitIds.set(id, unit.id);
     }
   }
@@ -133,13 +147,15 @@ export function parseBackup(text, bank) {
     validate(value.review === null || response(value.review));
   }
   for (const [key, run] of Object.entries(state.runs)) {
-    const match = /^(unit|review):(\d+):(zh-en|en-zh)$/.exec(key);
+    const match = /^(unit|review|shuffle):(0|[1-9]\d*):(zh-en|en-zh)$/.exec(key);
     validate(match && object(run) && run.direction === match[3] && Array.isArray(run.ids) && run.ids.length > 0);
     const unit = Number(match[2]);
     const expected = wordsByUnit.get(unit);
     validate(new Set(run.ids).size === run.ids.length && run.ids.every(id => unitIds.has(id)));
     if (match[1] === 'unit') {
       validate(expected && run.ids.length === expected.length && run.ids.every((id, i) => id === expected[i]));
+    } else if (match[1] === 'shuffle') {
+      validate(shuffleSizes.includes(run.ids.length) && (unit === 0 || run.ids.every(id => unitChapters.get(unitIds.get(id)) === unit)));
     } else {
       validate(unit === 0 || (expected && run.ids.every(id => unitIds.get(id) === unit)));
     }

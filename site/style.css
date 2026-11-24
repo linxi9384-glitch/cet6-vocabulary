@@ -194,6 +194,11 @@ input[type="text"], input[type="search"], select { background: var(--paper); bor
 
 .settings-section { margin: 26px 0; max-width: 840px; }
 .settings-section h2 { margin-bottom: 9px; }
+.shuffle-form { max-width: 840px; padding: 16px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.shuffle-form h2 { margin-bottom: 13px; }
+.shuffle-options { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
+.shuffle-options label { display: grid; gap: 5px; color: var(--muted); font-size: 13px; }
+.shuffle-options button { min-height: 44px; }
 .setting-row { display: flex; align-items: center; gap: 12px; padding: 14px 0; border-top: 1px solid var(--line); }
 .setting-row > div { margin-right: auto; }
 .setting-row small { display: block; margin-top: 4px; color: var(--muted); }
@@ -283,7 +288,9 @@ dialog::backdrop { background: #152e24a6; }
   .sidebar { gap: 4px; padding-inline: 8px; }
   .brand strong { font-size: 14px; }
   .brand-symbol { width: 30px; height: 30px; }
-  .nav a { padding-inline: 4px; font-size: 11px; }
+  .nav { gap: 1px; }
+  .nav a { padding-inline: 2px; font-size: 11px; }
+  .nav-count { display: none; }
   .section-head { flex-wrap: wrap; }
   .topbar { flex-wrap: wrap; }
   .resume-band { min-height: 166px; }

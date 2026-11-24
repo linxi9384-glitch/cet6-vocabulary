@@ -1,4 +1,4 @@
-const cacheName = 'cet6-study-v4';
+const cacheName = 'cet6-study-v5';
 const assets = [
   './', './index.html', './style.css', './app.mjs', './study.mjs', './bank.json',
   './manifest.webmanifest', './app-192.png', './app-512.png', './book-cover.png',

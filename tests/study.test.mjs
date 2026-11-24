@@ -3,13 +3,13 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import {
   blankState, checkAnswer, finishRun, lessonProgress, makeBackup,
-  parseBackup, saveAnswer, startRun,
+  parseBackup, saveAnswer, shuffledIds, startRun,
 } from '../site/study.mjs';
 
 const word = { id: 1, en: 'take part', gloss: 'v. 参加；参与 / n. （正式）参与', variants: ['take part in'] };
+const bank = JSON.parse(readFileSync(new URL('../site/bank.json', import.meta.url), 'utf8'));
 
 test('the exported edition preserves the complete unit structure', () => {
-  const bank = JSON.parse(readFileSync(new URL('../site/bank.json', import.meta.url), 'utf8'));
   assert.equal(bank.chapters.length, 4);
   const units = bank.chapters.flatMap(chapter => chapter.units);
   assert.deepEqual(units.map(unit => unit.id), Array.from({ length: 64 }, (_, i) => i + 1));
@@ -85,4 +85,36 @@ test('backup restores preview, drafts and errors and rejects mismatched data', (
   assert.throws(() => parseBackup(JSON.stringify({ ...backup, version: 2 }), bank));
   backup.state.errors['zh-en:1'].unit = 64;
   assert.throws(() => parseBackup(JSON.stringify(backup), bank));
+});
+
+test('shuffle samples across the selected scope without duplicates', () => {
+  const chapter = bank.chapters[1].units.flatMap(unit => unit.blocks.flatMap(block => block.ids));
+  const random = () => 0.9999;
+  const sample = shuffledIds(bank, 2, 20, random);
+  assert.equal(sample.length, 20);
+  assert.equal(new Set(sample).size, 20);
+  assert.equal(sample[0], chapter.at(-1));
+  assert.ok(sample.every(id => chapter.includes(id)));
+  const whole = shuffledIds(bank, 0, 40, random);
+  assert.equal(new Set(whole).size, 40);
+  assert.ok(whole.some(id => !chapter.includes(id)));
+});
+
+test('backup preserves shuffled IDs and rejects duplicates or wrong chapters', () => {
+  const state = blankState();
+  const key = 'shuffle:2:en-zh';
+  const run = startRun(state, key, 'en-zh', shuffledIds(bank, 2, 10, () => 0.9999));
+  run.index = 1;
+  run.drafts[run.ids[1]] = 'draft';
+  const parse = () => parseBackup(JSON.stringify(makeBackup(state, bank)), bank);
+  assert.deepEqual(parse().runs[key], run);
+
+  const first = run.ids[0];
+  run.ids[0] = run.ids[1];
+  assert.throws(parse);
+  run.ids[0] = 1;
+  assert.throws(parse);
+  run.ids[0] = first;
+  run.ids.pop();
+  assert.throws(parse);
 });

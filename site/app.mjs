@@ -346,7 +346,13 @@ function readingView() {
     <article class="reading-article">
       <p class="eyebrow"><time datetime="${article.date}">${article.date}</time> · ${article.wordCount} 词</p>
       <h2 lang="en">${html(article.title)}</h2>
-      <div class="reading-body" lang="en">${article.paragraphs.map(text => `<p>${readingParagraph(text, words)}</p>`).join('')}</div>
+      <div class="reading-body">${article.paragraphs.map((text, index) => {
+        const translation = article.translations?.[index];
+        return `<div class="reading-pair">
+          <p class="reading-original" lang="en">${readingParagraph(text, words)}</p>
+          ${typeof translation === 'string' && translation.trim() ? `<p class="reading-translation" lang="zh-CN">${html(translation)}</p>` : ''}
+        </div>`;
+      }).join('')}</div>
     </article>
     <details class="reading-glossary"><summary>本篇词汇 · ${words.length} 个词条</summary>
       <dl>${words.map(word => `<div><dt lang="en">${html(word.en)}</dt><dd>${html(word.gloss)}</dd></div>`).join('')}</dl>

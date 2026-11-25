@@ -207,8 +207,9 @@ input[type="text"], input[type="search"], select { background: var(--paper); bor
 .reading-article, .reading-glossary { max-width: 760px; }
 .reading-article { padding-block: 20px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .reading-article h2 { font-family: Georgia, serif; font-size: 30px; margin-bottom: 16px; }
-.reading-body { font-family: Georgia, serif; font-size: 18px; line-height: 1.75; }
-.reading-body p + p { margin-top: 14px; }
+.reading-original { font-family: Georgia, serif; font-size: 18px; line-height: 1.75; }
+.reading-pair + .reading-pair { margin-top: 24px; }
+.reading-translation { margin-top: 8px; padding-inline-start: 12px; border-inline-start: 2px solid var(--line); color: var(--muted); font-size: 15px; line-height: 1.8; }
 .reading-body mark { color: inherit; background: #f9eadc; box-decoration-break: clone; }
 .reading-glossary { margin-top: 14px; }
 .reading-glossary summary { cursor: pointer; min-height: 44px; padding: 10px 0; font-weight: 650; }

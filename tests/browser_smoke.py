@@ -251,11 +251,16 @@ def reading(context, screenshots=None):
     page.reload()
     article = page.locator(".reading-article")
     expect(article.locator("h2")).to_be_visible()
-    assert article.locator(".reading-body p").count() >= 3
     date = article.locator("time").get_attribute("datetime")
+    passage = page.request.get(f"{ROOT}readings/{date}.json").json()
+    english = article.locator('.reading-body p[lang="en"]')
+    translations = article.locator('.reading-body p[lang="en"] + p[lang="zh-CN"]')
+    expect(english).to_have_text(passage["paragraphs"])
+    expect(translations).to_have_text(passage["translations"])
     expect(article.locator("mark")).to_have_count(0)
     page.get_by_role("checkbox", name="高亮词库词汇").check()
     expect(article.locator("mark").first).to_be_visible()
+    expect(translations).to_have_text(passage["translations"])
     page.get_by_text("本篇词汇 · 100 个词条", exact=True).click()
     expect(page.locator(".reading-glossary dt")).to_have_count(100)
     page.get_by_label("往期阅读").select_option(date)
@@ -267,6 +272,7 @@ def reading(context, screenshots=None):
     context.set_offline(True)
     assert page.reload().from_service_worker
     expect(article.locator("time")).to_have_text(date)
+    expect(translations).to_have_text(passage["translations"])
     page.close()
 
 

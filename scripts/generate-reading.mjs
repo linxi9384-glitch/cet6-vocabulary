@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { isReadingDate, readingDate, validatePassage, vocabularyMatches } from '../site/reading.mjs';
+import { isReadingDate, readingDate, validatePassage, validateTranslations, vocabularyMatches } from '../site/reading.mjs';
 
 const endpoint = 'https://api.sudorelay.com/v1/chat/completions';
 const model = 'deepseek-v4-1-flash';
@@ -34,12 +34,12 @@ async function readJson(url, fallback) {
   }
 }
 
-async function completion(prompt, apiKey) {
+async function completion(prompt, apiKey, maxTokens = 2000) {
   const result = await fetch(endpoint, {
     method: 'POST', redirect: 'error', signal: AbortSignal.timeout(150_000),
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model, messages: [{ role: 'user', content: prompt }], max_tokens: 2000,
+      model, messages: [{ role: 'user', content: prompt }], max_tokens: maxTokens,
       thinking: { type: 'disabled' },
       response_format: { type: 'json_object' },
     }),
@@ -116,6 +116,24 @@ async function writePassage(words, apiKey) {
   return validatePassage({ title, paragraphs }, words);
 }
 
+async function translatePassage({ title, paragraphs }, apiKey) {
+  const prompt = [
+    'Translate this English CET-6 reading into natural Simplified Chinese for learners.',
+    'Use the whole passage as context. Preserve every sentence and factual detail.',
+    'Return JSON only with a translations array: exactly one complete Chinese string per English paragraph, in source order.',
+    'Do not add numbering, headings, explanations, or a title translation to the array.',
+    JSON.stringify({ title, paragraphs }),
+  ].join('\n');
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    const content = await completion(prompt, apiKey, 3200);
+    try {
+      return validateTranslations(paragraphs, JSON.parse(content)?.translations);
+    } catch {
+      if (attempt === 3) throw new Error('Could not generate one Chinese translation per paragraph.');
+    }
+  }
+}
+
 async function main(date = readingDate()) {
   if (!isReadingDate(date)) throw new Error('Expected a date in YYYY-MM-DD format.');
   const bank = await readJson(bankPath);
@@ -123,6 +141,7 @@ async function main(date = readingDate()) {
   const articlePath = new URL(`${date}.json`, output);
   const indexPath = new URL('index.json', output);
   await mkdir(output, { recursive: true });
+  const apiKey = process.env.CET6_READING_API_KEY?.trim();
   let article = await readJson(articlePath, null);
   if (article) {
     validatePassage(article, words);
@@ -130,11 +149,16 @@ async function main(date = readingDate()) {
       throw new Error('The saved reading does not match its date and word selection.');
     }
   } else {
-    const apiKey = process.env.CET6_READING_API_KEY?.trim();
     if (!apiKey) throw new Error('CET6_READING_API_KEY is required to generate a reading.');
     const articleText = await writePassage(words, apiKey);
     article = { date, ...articleText, wordIds: words.map(word => word.id) };
+  }
+  if (article.translations === undefined) {
+    if (!apiKey) throw new Error('CET6_READING_API_KEY is required to translate a reading.');
+    article.translations = await translatePassage(article, apiKey);
     await writeJson(articlePath, article);
+  } else {
+    validateTranslations(article.paragraphs, article.translations);
   }
   const dates = await readJson(indexPath, []);
   if (!dates.includes(date)) await writeJson(indexPath, [...dates, date].sort().reverse());

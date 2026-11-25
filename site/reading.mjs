@@ -52,6 +52,14 @@ export function vocabularyMatches(text, entry) {
   return [...text.matchAll(pattern)].map(match => ({ start: match.index, text: match[0] }));
 }
 
+export function validateTranslations(paragraphs, translations) {
+  if (!Array.isArray(translations) || translations.length !== paragraphs.length
+    || translations.some(text => typeof text !== 'string' || !/\p{Script=Han}/u.test(text))) {
+    throw new Error('Expected one Chinese translation for each paragraph.');
+  }
+  return translations.map(text => text.trim());
+}
+
 export function validatePassage(passage, words) {
   if (typeof passage?.title !== 'string' || !passage.title.trim() || passage.title.length > 140
     || !Array.isArray(passage.paragraphs) || passage.paragraphs.length < 3 || passage.paragraphs.length > 9

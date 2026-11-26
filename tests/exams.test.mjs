@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 test('the six scanned papers cover their original pages and have valid keys for all 55 objective questions', async () => {
@@ -25,4 +26,16 @@ test('exam grading counts wrong and unanswered questions separately and excludes
   assert.equal(validExamRuns({ [paper.id]: { ...run, page: paper.last + 1 } }), false);
   assert.equal(validExamRuns({ [paper.id]: { ...run, answers: { 1: 'M' } } }), false);
   assert.equal(validExamRuns({ [paper.id]: { ...run, answers: { '001': 'B' } } }), false);
+});
+
+test('every paper has complete selectable questions and source material for all sections', async () => {
+  const { examChoices, papers, validExamContent } = await import('../site/exams.mjs');
+  for (const paper of papers) {
+    const data = JSON.parse(readFileSync(new URL('../site/exam-data/' + paper.id + '.json', import.meta.url)));
+    assert.ok(validExamContent(paper, data), paper.id);
+    assert.equal(examChoices(36, paper).length, data.matching.paragraphs.length, paper.id);
+    assert.equal(validExamContent(paper, { ...data, listening: data.listening.slice(1) }), false);
+    assert.equal(validExamContent(paper, { ...data, cloze: { ...data.cloze, options: data.cloze.options.slice(1) } }), false);
+    assert.equal(validExamContent(paper, { ...data, reading: data.reading.slice(1) }), false);
+  }
 });

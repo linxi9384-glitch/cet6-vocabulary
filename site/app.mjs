@@ -4,6 +4,8 @@ import {
 } from './study.mjs';
 import { isReadingDate, readingDate, vocabularyMatches } from './reading.mjs';
 import { mountExams } from './exam-view.mjs';
+import { papers } from './exams.mjs';
+import { mountExamPractice } from './exam-practice.mjs';
 
 const storageKey = 'cet6.study.v1';
 const recordingAccent = 'en-US';
@@ -92,7 +94,7 @@ function route() {
   }
   if (name === 'errors' || name === 'settings') return { name };
   if (name === 'reading') return { name, date: isReadingDate(raw) ? raw : null };
-  if (name === 'exams') return { name, id: raw };
+  if (name === 'exams') return { name, id: raw, scan: direction === 'scan' };
   const lastChapter = units.get(state.lastUnit)?.chapter ?? 1;
   return { name: 'home', chapter: bank.chapters.some(chapter => chapter.id === id) ? id : lastChapter };
 }
@@ -429,10 +431,12 @@ function render({ top = false } = {}) {
     settings: settingsView,
   }[page.name];
   if (page.name === 'exams') {
-    unmountExam = mountExams(view, page.id, state, { html, icon, persist,
+    const controls = { html, icon, persist,
       confirm: (title, message, label, action) => showDialog(title,
         `<p>${html(message)}</p><div class="dialog-actions"><button class="button" data-action="close">取消</button><button class="button primary" data-action="confirm">${html(label)}</button></div>`, action),
-    });
+    };
+    const paper = papers.find(item => item.id === page.id);
+    unmountExam = paper && !page.scan ? mountExamPractice(view, paper, state, controls) : mountExams(view, page.id, state, controls);
   } else {
     view.innerHTML = renderView();
   }

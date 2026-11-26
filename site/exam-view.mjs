@@ -17,7 +17,7 @@ export function mountExams(root, id, state, { html, icon, persist, confirm }) {
       <div class="exam-list">${papers.map(item => {
         const run = state.exams?.[item.id];
         const progress = run?.submitted ? `答对 ${gradeExam(item, run).correct} / ${examQuestionCount} 题`
-          : run ? `已作答 ${objective(run)} / ${examQuestionCount} 题` : `${item.last - item.first + 1} 页试卷`;
+          : run ? `已作答 ${objective(run)} / ${examQuestionCount} 题` : `${examQuestionCount} 道客观题`;
         return `<a class="exam-list-row" href="#exams/${item.id}"><span class="stat-symbol green">${icon('file-text')}</span>
           <span><strong>${item.title}</strong><small>${progress}</small></span>
           <span class="exam-row-action">${run?.submitted ? '查看结果' : run ? '继续练习' : '开始练习'} ${icon('chevron-right')}</span></a>`;
@@ -36,7 +36,7 @@ export function mountExams(root, id, state, { html, icon, persist, confirm }) {
   let audioUrl;
 
   root.innerHTML = `<a class="back" href="#exams">${icon('arrow-left')} 返回真题目录</a>
-    <section class="section-head"><h1>${paper.title}</h1></section>
+    <section class="section-head"><h1>${paper.title}</h1><a class="button" href="#exams/${paper.id}">${icon('list-checks')} 网页答题</a></section>
     <div class="exam-work">
       <section class="exam-document" aria-labelledby="exam-document-title">
         <div class="exam-surface-head"><h2 id="exam-document-title" tabindex="-1">试卷原页</h2>
@@ -86,9 +86,12 @@ export function mountExams(root, id, state, { html, icon, persist, confirm }) {
         return `<div class="exam-answer-row"><strong>${number}</strong><span>作答 ${selected || '空'}</span>
           <span>答案 ${correct}</span><span class="result-tag ${result}">${status[result]}</span></div>`;
       }
+      const choices = examChoices(number, paper);
+      const oldChoice = selected && !choices.includes(selected)
+        ? `<option value="${html(selected)}" selected disabled>${html(selected)}（旧记录）</option>` : '';
       return `<label class="exam-answer-row"><span>第 ${number} 题</span>
         <select data-exam-answer="${number}" aria-label="第 ${number} 题">
-          <option value="">未作答</option>${[...examChoices(number)].map(letter => `<option value="${letter}" ${letter === selected ? 'selected' : ''}>${letter}</option>`).join('')}
+          <option value="">未作答</option>${oldChoice}${[...choices].map(letter => `<option value="${letter}" ${letter === selected ? 'selected' : ''}>${letter}</option>`).join('')}
         </select></label>`;
     }).join('') || '<p class="muted">本部分全部答对。</p>';
   }

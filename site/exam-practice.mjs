@@ -1,43 +1,45 @@
-import { blankExam, examChoices, examQuestionCount, gradeExam, validExamContent, writtenLimit } from './exams.mjs';
+import { blankExam, examChoices, examExplanationGroup, examFirst, examPositionCount, examQuestionCount, examSectionsFor, gradeExam, validExamContent, writtenLimit } from './exams.mjs';
+import { showExamExplanation } from './exam-explanation.mjs';
 
 const writingPosition = examQuestionCount + 1;
-const translationPosition = examQuestionCount + 2;
-const sections = [
-  { title: '听力', first: 1, last: 25 },
-  { title: '选词填空', first: 26, last: 35 },
-  { title: '段落匹配', first: 36, last: 45 },
-  { title: '仔细阅读', first: 46, last: examQuestionCount },
-  { title: '写作', first: writingPosition, last: writingPosition },
-  { title: '翻译', first: translationPosition, last: translationPosition },
-];
 const resultLabel = { correct: '答对', wrong: '答错', skipped: '未作答', answered: '已作答' };
 const wordCount = text => text.trim().split(/\s+/u).filter(Boolean).length;
 
-export function mountExamPractice(root, paper, state, { html, icon, persist, confirm }) {
-  let run = state.exams?.[paper.id] ?? blankExam(paper);
-  let position = run.position ?? 1;
+export function mountExamPractice(root, paper, state, { html, icon, persist, confirm, showDialog }, topic) {
+  const available = examSectionsFor(paper);
+  const sections = topic ? [topic] : available;
+  const first = topic?.first ?? examFirst(paper);
+  const last = topic?.last ?? examPositionCount;
+  const objectiveCount = Math.max(0, Math.min(last, examQuestionCount) - first + 1);
+  const storage = topic ? (state.examTopics ??= {}) : (state.exams ??= {});
+  const runKey = topic ? paper.id + ':' + topic.id : paper.id;
+  const submitLabel = topic ? '核对本题型' : '交卷核对';
+  const restartLabel = topic ? '重做本题型' : '重做本套';
+  let run = storage[runKey] ?? blankExam(paper);
+  let position = run.position ?? first;
   let content;
   let materialKey;
   let audioUrl;
   const lifecycle = new AbortController();
 
   root.innerHTML = `<div class="exam-practice">
-    <a class="back" href="#exams">${icon('arrow-left')} 返回真题目录</a>
+    <a class="back" href="${topic ? '#topics/' + topic.id : '#exams'}">${icon('arrow-left')} ${topic ? '返回' + topic.title + '专题' : '返回真题目录'}</a>
     <header class="section-head exam-practice-head">
       <h1>${html(paper.title)}</h1>
-      <a class="button" href="#exams/${html(paper.id)}/scan">${icon('file-text')} 试卷原页</a>
+      <a class="button" href="#exams/${paper.id}${topic ? '' : '/scan'}">${icon('file-text')} ${topic ? '整套试卷' : '试卷原页'}</a>
     </header>
     <div class="exam-practice-loading"></div>
     <div class="exam-practice-body" hidden>
       <div class="exam-practice-top">
-        <nav class="exam-practice-sections" aria-label="题型">${sections.map(({ title, first }) =>
+        ${topic ? `<h2 class="exam-topic-title">${topic.title}专题</h2>` : `<nav class="exam-practice-sections" aria-label="题型">${sections.map(({ title, first }) =>
           `<button class="button exam-practice-section" type="button" data-exam-practice-go="${first}">${title}</button>`
-        ).join('')}</nav>
-        <div class="exam-practice-progress" aria-live="polite"></div>
+        ).join('')}</nav>`}
+        ${!topic && first > 1 ? `<p class="muted">原卷从选词填空开始 · <a class="exam-text-link" href="#topics/listening">查看听力专题</a></p>` : ''}
+        <div class="exam-practice-progress" aria-live="polite" ${objectiveCount ? '' : 'hidden'}></div>
       </div>
-      <details class="exam-practice-overview">
+      <details class="exam-practice-overview" ${objectiveCount ? '' : 'hidden'}>
         <summary>答题卡</summary>
-        <div class="exam-practice-overview-body">${sections.slice(0, 4).map(({ title, first, last }) =>
+        <div class="exam-practice-overview-body">${sections.filter(section => section.first <= examQuestionCount).map(({ title, first, last }) =>
           `<div class="exam-practice-number-group"><h3>${title}</h3><div class="exam-practice-numbers">
             ${Array.from({ length: last - first + 1 }, (_, index) => first + index).map(number =>
               `<button class="exam-practice-number" type="button" data-exam-practice-go="${number}" aria-label="第 ${number} 题">${number}</button>`
@@ -59,8 +61,8 @@ export function mountExamPractice(root, paper, state, { html, icon, persist, con
           <footer class="exam-practice-footer">
             <button class="button" type="button" data-exam-practice-action="previous">${icon('chevron-left')} 上一题</button>
             <button class="button" type="button" data-exam-practice-action="next">下一题 ${icon('chevron-right')}</button>
-            <button class="button primary" type="button" data-exam-practice-action="submit">${icon('check')} 交卷核对</button>
-            <button class="button" type="button" data-exam-practice-action="restart" hidden>${icon('rotate-ccw')} 重做本套</button>
+            <button class="button primary" type="button" data-exam-practice-action="submit">${icon('check')} ${submitLabel}</button>
+            <button class="button" type="button" data-exam-practice-action="restart" hidden>${icon('rotate-ccw')} ${restartLabel}</button>
           </footer>
         </div>
       </div>
@@ -91,7 +93,7 @@ export function mountExamPractice(root, paper, state, { html, icon, persist, con
 
   function save() {
     run.position = position;
-    (state.exams ??= {})[paper.id] = run;
+    storage[runKey] = run;
     persist();
   }
 
@@ -110,13 +112,14 @@ export function mountExamPractice(root, paper, state, { html, icon, persist, con
   }
 
   function updateProgress() {
+    if (!objectiveCount) return;
     if (run.submitted) {
-      const tally = gradeExam(paper, run);
+      const tally = gradeExam(paper, run, first, last);
       progress.innerHTML = `<div class="result-metrics" aria-label="客观题结果">${Object.entries(tally).map(([result, count]) =>
         `<span class="${result}"><strong>${count}</strong> ${resultLabel[result]}</span>`
       ).join('')}</div>`;
     } else {
-      progress.textContent = `已作答 ${answeredCount()} / ${examQuestionCount} 题`;
+      progress.textContent = `已作答 ${answeredCount()} / ${objectiveCount} 题`;
     }
   }
 
@@ -201,7 +204,10 @@ export function mountExamPractice(root, paper, state, { html, icon, persist, con
     const prompt = writing
       ? `<p class="exam-practice-prompt" lang="en">${html(content.writing)}</p>`
       : content.translation.map(text => `<p class="exam-practice-prompt" lang="zh-CN">${html(text)}</p>`).join('');
-    question.innerHTML = `<h2 class="exam-practice-heading" id="exam-practice-question-title" tabindex="-1">${section.title}</h2>
+    question.innerHTML = `<div class="exam-practice-question-head">
+      <h2 class="exam-practice-heading" id="exam-practice-question-title" tabindex="-1">${section.title}</h2>
+      ${explanationButton()}
+    </div>
       <div class="exam-practice-written-prompt">${prompt}</div>
       <div class="exam-practice-written">
         <label for="exam-practice-draft">${section.title}草稿</label>
@@ -211,6 +217,10 @@ export function mountExamPractice(root, paper, state, { html, icon, persist, con
 ${html(run[field])}</textarea>
         <p class="exam-practice-count muted">${wordCount(run[field])} 词</p>
       </div>`;
+  }
+
+  function explanationButton() {
+    return `<button type="button" class="button exam-explanation-button" data-exam-practice-action="explanation">${icon('file-search')} 解析</button>`;
   }
 
   function renderObjective() {
@@ -232,8 +242,10 @@ ${html(run[field])}</textarea>
     const oldChoice = !run.submitted && selected && !examChoices(position, paper).includes(selected);
     question.innerHTML = `<div class="exam-practice-question-head">
       <h2 class="exam-practice-heading" id="exam-practice-question-title" tabindex="-1">第 ${position} 题</h2>
-      <button class="square exam-practice-clear" type="button" data-exam-practice-action="clear"
-        aria-label="清除作答" title="清除作答" ${run.submitted || !run.answers[position] ? 'hidden' : ''}>${icon('x')}</button>
+      <div class="exam-practice-question-actions">${explanationButton()}
+        <button class="square exam-practice-clear" type="button" data-exam-practice-action="clear"
+          aria-label="清除作答" title="清除作答" ${run.submitted || !run.answers[position] ? 'hidden' : ''}>${icon('x')}</button>
+      </div>
     </div>
     ${prompt ? `<p class="exam-practice-prompt" lang="en">${html(prompt)}</p>` : ''}
     ${run.submitted ? `<div class="exam-practice-review">
@@ -261,10 +273,11 @@ ${html(run[field])}</textarea>
     updateMaterial();
     if (position <= examQuestionCount) renderObjective();
     else renderWritten(section);
-    previous.disabled = position === 1;
-    next.disabled = position === translationPosition;
-    submit.hidden = run.submitted;
-    restart.hidden = !run.submitted;
+    previous.disabled = position === first;
+    next.disabled = position === last;
+    previous.hidden = next.hidden = first === last;
+    submit.hidden = run.submitted || !objectiveCount;
+    restart.hidden = !run.submitted || !objectiveCount;
   }
 
   function refreshRun() {
@@ -280,7 +293,7 @@ ${html(run[field])}</textarea>
   }
 
   function goTo(number) {
-    if (!content || number < 1 || number > translationPosition) return;
+    if (!content || number < first || number > last) return;
     if (position !== number) {
       position = number;
       save();
@@ -294,7 +307,7 @@ ${html(run[field])}</textarea>
     else delete run.answers[position];
     save();
     updateProgress();
-    updateNumber(numbers[position - 1], position);
+    updateNumber(numbers[position - first], position);
     updateBlanks(false);
     question.querySelector('.exam-practice-invalid')?.remove();
     question.querySelector('.exam-practice-clear').hidden = !value;
@@ -354,14 +367,15 @@ ${html(run[field])}</textarea>
     if (action === 'previous') goTo(position - 1);
     else if (action === 'next') goTo(position + 1);
     else if (action === 'retry') loadContent(true);
+    else if (action === 'explanation') showExamExplanation(paper, content, examExplanationGroup(position), position, { html, icon, showDialog });
     else if (action === 'clear' && !run.submitted) {
       const checked = question.querySelector('input:checked');
       if (checked) checked.checked = false;
       updateAnswer('');
       question.querySelector('input').focus({ preventScroll: true });
     } else if (action === 'submit' && !run.submitted) {
-      const skipped = examQuestionCount - answeredCount();
-      confirm('交卷核对', skipped ? `还有 ${skipped} 道客观题未作答。` : '核对本套客观题答案。', '确认交卷', () => {
+      const skipped = objectiveCount - answeredCount();
+      confirm(submitLabel, skipped ? `还有 ${skipped} 道客观题未作答。` : '核对客观题答案。', '确认交卷', () => {
         if (lifecycle.signal.aborted) return;
         run.submitted = true;
         save();
@@ -369,10 +383,10 @@ ${html(run[field])}</textarea>
         focusQuestion();
       });
     } else if (action === 'restart' && run.submitted) {
-      confirm('重做本套', '本套试卷的作答和草稿将被清空。', '确认重做', () => {
+      confirm(restartLabel, topic ? '本题型的作答将被清空。' : '本套试卷的作答和草稿将被清空。', '确认重做', () => {
         if (lifecycle.signal.aborted) return;
         run = blankExam(paper);
-        position = 1;
+        position = first;
         overview.open = false;
         save();
         if (audioUrl && audio.readyState) {

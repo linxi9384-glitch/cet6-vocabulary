@@ -1,23 +1,20 @@
-import { blankExam, examChoices, examQuestionCount, gradeExam, papers, writtenLimit } from './exams.mjs';
+import { blankExam, examChoices, examFirst, examQuestionCount, examScan, examSectionsFor, gradeExam, papers, writtenLimit } from './exams.mjs';
 import { importExamPdf, restoreExamPdf } from './exam-pdf.mjs';
 
-const sections = [
-  { title: '听力', first: 1, last: 25 },
-  { title: '选词填空', first: 26, last: 35 },
-  { title: '段落匹配', first: 36, last: 45 },
-  { title: '仔细阅读', first: 46, last: 55 },
-];
 const status = { correct: '答对', wrong: '答错', skipped: '未作答' };
 const objective = run => Object.keys(run.answers).length;
+const questionCount = paper => examQuestionCount - examFirst(paper) + 1;
 
 export function mountExams(root, id, state, { html, icon, persist, confirm }) {
   const paper = papers.find(item => item.id === id);
   if (!paper) {
-    root.innerHTML = `<section class="section-head"><h1>六级真题</h1><span class="total-label">6 套试卷</span></section>
+    root.innerHTML = `<section class="section-head"><h1>六级真题</h1><a class="button exam-topic-link" href="#topics">${icon('layout-list')} 专题练习</a></section>
+      <p class="muted exam-list-total">${papers.length} 套试卷</p>
       <div class="exam-list">${papers.map(item => {
         const run = state.exams?.[item.id];
-        const progress = run?.submitted ? `答对 ${gradeExam(item, run).correct} / ${examQuestionCount} 题`
-          : run ? `已作答 ${objective(run)} / ${examQuestionCount} 题` : `${examQuestionCount} 道客观题`;
+        const count = questionCount(item);
+        const progress = run?.submitted ? `答对 ${gradeExam(item, run).correct} / ${count} 题`
+          : run ? `已作答 ${objective(run)} / ${count} 题` : `${count} 道客观题`;
         return `<a class="exam-list-row" href="#exams/${item.id}"><span class="stat-symbol green">${icon('file-text')}</span>
           <span><strong>${item.title}</strong><small>${progress}</small></span>
           <span class="exam-row-action">${run?.submitted ? '查看结果' : run ? '继续练习' : '开始练习'} ${icon('chevron-right')}</span></a>`;
@@ -25,6 +22,10 @@ export function mountExams(root, id, state, { html, icon, persist, confirm }) {
     return;
   }
 
+  const sections = examSectionsFor(paper).filter(section => section.first <= examQuestionCount);
+  const source = examScan(paper);
+  const fileKey = paper.source ?? 'workbook';
+  const count = questionCount(paper);
   let run = state.exams?.[id] ?? blankExam(paper);
   let sectionIndex = 0;
   let showWrong = false;
@@ -43,7 +44,7 @@ export function mountExams(root, id, state, { html, icon, persist, confirm }) {
           <label class="button exam-file-button">${icon('folder-open')} 选择 PDF<input type="file" id="exam-file" accept=".pdf,application/pdf"></label>
         </div>
         <p class="exam-file-status muted" role="status">正在检查本机试卷…</p>
-        <p class="exam-file-hint muted">选用《集训刷题卷（历年真题）》PDF，试卷保存在当前设备。</p>
+        <p class="exam-file-hint muted">选用《${html(source.name)}》，试卷保存在当前设备。</p>
         <div class="exam-page-tools" hidden>
           <button class="square" type="button" data-exam-action="previous" title="上一页" aria-label="上一页">${icon('chevron-left')}</button>
           <label class="select-label">卷内页码 <select id="exam-page" aria-label="卷内页码">
@@ -104,7 +105,7 @@ export function mountExams(root, id, state, { html, icon, persist, confirm }) {
       <button class="button exam-jump" type="button" data-exam-action="document">${icon('file-text')} 试卷</button></div>
       ${tally ? `<div class="result-metrics">${Object.entries(tally).map(([key, count]) =>
         `<span class="${key}"><strong>${count}</strong> ${status[key]}</span>`).join('')}</div>`
-        : `<p class="muted exam-progress" aria-live="polite">已作答 ${objective(run)} / ${examQuestionCount} 题</p>`}
+        : `<p class="muted exam-progress" aria-live="polite">已作答 ${objective(run)} / ${count} 题</p>`}
       <div class="exam-sheet-tools">
         <label class="select-label">题型 <select id="exam-section" aria-label="题型">
           ${sections.map(({ title, first, last }, index) => `<option value="${index}" ${index === sectionIndex ? 'selected' : ''}>${title}（${first}–${last}）</option>`).join('')}
@@ -139,7 +140,7 @@ export function mountExams(root, id, state, { html, icon, persist, confirm }) {
       const pixels = Math.min(2100, Math.ceil(width * Math.min(devicePixelRatio, 2.5)));
       const viewport = page.getViewport({ scale: pixels / page.getViewport({ scale: 1 }).width });
       const canvas = document.createElement('canvas');
-      const cutoff = number === paper.last && !run.submitted ? paper.cutoff : 1;
+      const cutoff = number === paper.last && !run.submitted ? paper.cutoff ?? 1 : 1;
       canvas.width = pixels;
       canvas.height = Math.ceil(viewport.height * cutoff);
       canvas.style.width = `${width}px`;
@@ -180,16 +181,16 @@ export function mountExams(root, id, state, { html, icon, persist, confirm }) {
       goToPage(Number(target.value));
     } else if (target.dataset.examAnswer && !run.submitted) {
       const number = Number(target.dataset.examAnswer);
-      if (target.value && examChoices(number).includes(target.value)) run.answers[number] = target.value;
+      if (target.value && examChoices(number, paper).includes(target.value)) run.answers[number] = target.value;
       else delete run.answers[number];
       save();
-      sheet.querySelector('.exam-progress').textContent = `已作答 ${objective(run)} / ${examQuestionCount} 题`;
+      sheet.querySelector('.exam-progress').textContent = `已作答 ${objective(run)} / ${count} 题`;
     } else if (target.id === 'exam-file' && target.files[0]) {
       importing = true;
       target.disabled = true;
       note.textContent = '正在读取试卷…';
       try {
-        const result = await importExamPdf(target.files[0]);
+        const result = await importExamPdf(target.files[0], source, fileKey);
         if (!work.isConnected) return;
         pdf = result.pdf;
         hint.hidden = true;
@@ -236,7 +237,7 @@ export function mountExams(root, id, state, { html, icon, persist, confirm }) {
       target.scrollIntoView({ block: 'start' });
       target.querySelector('h2')?.focus({ preventScroll: true });
     } else if (action === 'submit' && !run.submitted) {
-      const skipped = examQuestionCount - objective(run);
+      const skipped = count - objective(run);
       confirm('交卷核对', skipped ? `还有 ${skipped} 道客观题未作答。` : '核对本套客观题答案。', '确认交卷', () => {
         run.submitted = true;
         save();
@@ -267,7 +268,7 @@ export function mountExams(root, id, state, { html, icon, persist, confirm }) {
   });
   let lastWidth;
   resize.observe(scan);
-  restoreExamPdf().then(saved => {
+  restoreExamPdf(source, fileKey).then(saved => {
     if (!work.isConnected || importing) return;
     pdf = saved;
     hint.hidden = Boolean(pdf);

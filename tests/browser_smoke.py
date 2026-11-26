@@ -2,13 +2,14 @@
 
 import json
 from pathlib import Path
+import os
 import re
 import sys
 
 from playwright.sync_api import expect, sync_playwright
 
 
-ROOT = "http://127.0.0.1:8765/"
+ROOT = os.environ.get("CET6_SMOKE_ROOT", "http://127.0.0.1:8765/")
 
 
 def no_overflow(page):
@@ -371,7 +372,7 @@ def exams(context, pdf_path=None, screenshots=None):
     page.on("pageerror", lambda error: errors.append(str(error)))
     page.goto(ROOT + "#exams")
     page.wait_for_function("navigator.serviceWorker.controller !== null")
-    expect(page.locator(".exam-list-row")).to_have_count(6)
+    expect(page.locator(".exam-list-row")).to_have_count(18)
     page.get_by_role("link", name=re.compile("2023 年 6 月第 1 套")).click()
     expect(page.get_by_role("heading", name="2023 年 6 月第 1 套")).to_be_visible()
     page.get_by_role("link", name="试卷原页", exact=True).click()
@@ -440,9 +441,76 @@ def exams(context, pdf_path=None, screenshots=None):
     page.close()
 
 
+def exam_topics(context, screenshots=None, scan_path=None, check_offline=True):
+    page = context.new_page()
+    errors = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    page.goto(ROOT + "#topics")
+    page.wait_for_function("navigator.serviceWorker.controller !== null")
+    rows = page.locator(".exam-list-row")
+    expect(rows).to_have_count(14)
+    topics = page.get_by_role("navigation", name="专题题型")
+    topics.get_by_role("link", name="段落匹配", exact=True).click()
+    expect(rows).to_have_count(18)
+    no_overflow(page)
+    third = "2025 年 12 月第 3 套"
+    rows.filter(has_text=third).click()
+    expect(page.get_by_role("heading", name="第 36 题", exact=True)).to_be_visible()
+    expect(page.get_by_role("radio")).to_have_count(18)
+    page.get_by_role("radio", name="段落 Q", exact=True).tap()
+    page.reload()
+    expect(page.get_by_role("radio", name="段落 Q", exact=True)).to_be_checked()
+    page.get_by_role("button", name="核对本题型", exact=True).click()
+    page.get_by_role("button", name="确认交卷", exact=True).click()
+    expect(page.get_by_text("1 答对", exact=True)).to_be_visible()
+    expect(page.get_by_text("9 未作答", exact=True)).to_be_visible()
+    page.get_by_role("link", name="整套试卷", exact=True).click()
+    expect(page.get_by_role("heading", name="第 26 题", exact=True)).to_be_visible()
+    expect(page.get_by_text("已作答 0 / 30 题")).to_be_visible()
+    expect(page.get_by_role("button", name="听力", exact=True)).to_have_count(0)
+    page.get_by_role("button", name="仔细阅读", exact=True).click()
+    page.get_by_role("button", name="解析", exact=True).click()
+    expect(page.get_by_role("dialog", name="仔细阅读 · 第 1 篇解析")).to_be_visible()
+    image = page.locator(".exam-explanation-image")
+    expect(image).to_have_attribute("src", "./exam-explanations/2025-12/43.webp")
+    page.wait_for_function("document.querySelector('.exam-explanation-image').naturalWidth >= 1600")
+    page.get_by_role("button", name="放大解析", exact=True).click()
+    page.wait_for_function("document.querySelector('.exam-explanation-frame').scrollWidth > document.querySelector('.exam-explanation-frame').clientWidth")
+    page.get_by_role("button", name="适应宽度", exact=True).click()
+    page.get_by_role("button", name="下一页解析", exact=True).click()
+    expect(image).to_have_attribute("src", "./exam-explanations/2025-12/44.webp")
+    page.get_by_role("button", name="关闭", exact=True).click()
+    page.locator(".exam-practice-overview summary").click()
+    page.get_by_role("button", name="第 51 题", exact=True).click()
+    page.get_by_role("button", name="解析", exact=True).click()
+    expect(page.get_by_role("dialog", name="仔细阅读 · 第 2 篇解析")).to_be_visible()
+    expect(image).to_have_attribute("src", "./exam-explanations/2025-12/45.webp")
+    expect(image).to_be_visible()
+    assert image.evaluate("img => img.naturalWidth >= 1600 && parseFloat(img.style.top) < 0")
+    no_overflow(page)
+    if screenshots:
+        page.screenshot(path=screenshots / f"cet6-explanation-{page.viewport_size['width']}.png")
+    page.get_by_role("button", name="关闭", exact=True).click()
+    if scan_path:
+        page.get_by_role("link", name="试卷原页", exact=True).click()
+        page.locator("#exam-file").set_input_files(scan_path)
+        expect(page.get_by_text("试卷已保存在本机", exact=True)).to_be_visible(timeout=45000)
+        expect(page.locator(".exam-scan canvas")).to_have_attribute("aria-label", "试卷第 1 页", timeout=45000)
+        page.get_by_role("link", name="网页答题", exact=True).click()
+    if check_offline:
+        context.set_offline(True)
+        assert page.reload().from_service_worker
+        expect(page.get_by_role("heading", name="第 51 题", exact=True)).to_be_visible()
+        page.get_by_role("button", name="解析", exact=True).click()
+        page.wait_for_function("document.querySelector('.exam-explanation-image').naturalWidth >= 1600")
+    assert not errors, errors
+    page.close()
+
+
 if __name__ == "__main__":
     screenshots = Path(sys.argv[1]) if len(sys.argv) > 1 else None
     pdf = Path(sys.argv[2]) if len(sys.argv) > 2 else None
+    recent_pdf = Path(sys.argv[3]) if len(sys.argv) > 3 else None
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch()
         study(browser.new_context(viewport={"width": 1440, "height": 960}), screenshots)
@@ -451,6 +519,10 @@ if __name__ == "__main__":
         reading(browser.new_context(viewport={"width": 390, "height": 844}, has_touch=True), screenshots)
         exam_practice(browser.new_context(viewport={"width": 820, "height": 1180}, has_touch=True), screenshots)
         exams(browser.new_context(viewport={"width": 820, "height": 1180}, has_touch=True), pdf, screenshots)
+        exam_topics(browser.new_context(viewport={"width": 390, "height": 844}, has_touch=True), screenshots, recent_pdf)
         device_layout(browser, screenshots)
         browser.close()
+        webkit = playwright.webkit.launch()
+        exam_topics(webkit.new_context(viewport={"width": 820, "height": 1180}, has_touch=True), screenshots, check_offline=False)
+        webkit.close()
     print("Verified vocabulary choices, handwritten spacing, dictation, exams, daily reading, backup and offline use.")

@@ -4,8 +4,9 @@ import {
 } from './study.mjs';
 import { isReadingDate, readingDate, vocabularyMatches } from './reading.mjs';
 import { mountExams } from './exam-view.mjs';
-import { papers } from './exams.mjs';
+import { examSectionsFor, papers } from './exams.mjs';
 import { mountExamPractice } from './exam-practice.mjs';
+import { renderExamTopics } from './exam-topics.mjs';
 
 const storageKey = 'cet6.study.v1';
 const recordingAccent = 'en-US';
@@ -95,6 +96,7 @@ function route() {
   if (name === 'errors' || name === 'settings') return { name };
   if (name === 'reading') return { name, date: isReadingDate(raw) ? raw : null };
   if (name === 'exams') return { name, id: raw, scan: direction === 'scan' };
+  if (name === 'topics') return { name, section: raw, id: direction };
   const lastChapter = units.get(state.lastUnit)?.chapter ?? 1;
   return { name: 'home', chapter: bank.chapters.some(chapter => chapter.id === id) ? id : lastChapter };
 }
@@ -133,7 +135,7 @@ function updateShell() {
     if (link.dataset.nav === selected) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   }
-  const labels = { home: '单元目录', unit: unitName(page.id), shuffle: '乱序练习', dictation: '听写', reading: '每日阅读', exams: '六级真题', errors: '错题本', review: '错题复测', settings: '设置与备份' };
+  const labels = { home: '单元目录', unit: unitName(page.id), shuffle: '乱序练习', dictation: '听写', reading: '每日阅读', exams: '六级真题', topics: '专题练习', errors: '错题本', review: '错题复测', settings: '设置与备份' };
   document.querySelector('#breadcrumb').innerHTML = `学习空间 ${icon('chevron-right')} <strong>${labels[page.name]}</strong>`;
 }
 
@@ -430,13 +432,19 @@ function render({ top = false } = {}) {
     errors: errorsView,
     settings: settingsView,
   }[page.name];
-  if (page.name === 'exams') {
-    const controls = { html, icon, persist,
+  if (page.name === 'exams' || page.name === 'topics') {
+    const controls = { html, icon, persist, showDialog,
       confirm: (title, message, label, action) => showDialog(title,
         `<p>${html(message)}</p><div class="dialog-actions"><button class="button" data-action="close">取消</button><button class="button primary" data-action="confirm">${html(label)}</button></div>`, action),
     };
     const paper = papers.find(item => item.id === page.id);
-    unmountExam = paper && !page.scan ? mountExamPractice(view, paper, state, controls) : mountExams(view, page.id, state, controls);
+    if (page.name === 'topics') {
+      const section = paper && examSectionsFor(paper).find(item => item.id === page.section);
+      if (section) unmountExam = mountExamPractice(view, paper, state, controls, section);
+      else view.innerHTML = renderExamTopics(page.section, state, controls);
+    } else {
+      unmountExam = paper && !page.scan ? mountExamPractice(view, paper, state, controls) : mountExams(view, page.id, state, controls);
+    }
   } else {
     view.innerHTML = renderView();
   }
@@ -579,7 +587,9 @@ let dialogAction;
 function showDialog(title, content, action) {
   dialogAction = action;
   dialog.innerHTML = `<div class="dialog-head"><h2 id="dialog-title">${title}</h2><button class="square" data-action="close" aria-label="关闭" title="关闭">${icon('x')}</button></div>${content}`;
+  dialog.scrollTop = 0;
   dialog.showModal();
+  return dialog;
 }
 
 function searchResults() {

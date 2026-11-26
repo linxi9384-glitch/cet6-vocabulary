@@ -230,6 +230,11 @@ input[type="text"], input[type="search"], select { background: var(--paper); bor
 .exam-list-row strong, .exam-list-row small { display: block; }
 .exam-list-row small { margin-top: 3px; color: var(--muted); font-size: 12px; }
 .exam-row-action { display: flex; align-items: center; gap: 4px; color: var(--green); font-size: 13px; }
+.exam-topic-link { flex: none; min-height: 44px; }
+.exam-topic-tabs { margin-block-end: 12px; }
+.exam-list-total { margin-block-end: 8px; font-size: 14px; }
+.exam-topic-title { font-size: 19px; }
+.exam-text-link { color: var(--green); text-decoration: underline; text-underline-offset: 3px; }
 .exam-work { display: grid; align-items: start; gap: 24px; }
 .exam-document, .exam-sheet { min-width: 0; border-top: 1px solid var(--line); padding-top: 12px; scroll-margin-top: 12px; }
 .exam-surface-head, .exam-page-tools, .exam-sheet-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
@@ -298,6 +303,8 @@ input[type="text"], input[type="search"], select { background: var(--paper); bor
 .exam-practice-paragraph + .exam-practice-paragraph { margin-top: .85em; }
 .exam-practice-paragraph-letter { color: var(--green); margin-inline-end: 4px; font-family: inherit; }
 .exam-practice-question-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; }
+.exam-practice-question-actions { display: flex; align-items: center; gap: 6px; flex: none; }
+.exam-explanation-button { min-height: 44px; }
 .exam-practice-heading { font-size: 19px; }
 .exam-practice-clear.square { width: 44px; min-height: 44px; }
 .exam-practice-prompt { margin: 5px 0 10px; font: 17px/1.55 Georgia, serif; }
@@ -342,6 +349,22 @@ dialog { color: var(--ink); background: var(--paper); border: 1px solid var(--li
 dialog::backdrop { background: #152e24a6; }
 .dialog-head, .dialog-actions { display: flex; align-items: center; gap: 10px; justify-content: space-between; margin-bottom: 12px; }
 .dialog-actions { justify-content: flex-end; margin: 15px 0 0; }
+dialog:has(.exam-explanation-image) { width: min(820px, calc(100% - 20px)); max-height: 93dvh; padding: 12px; }
+.exam-explanation { display: grid; gap: 8px; }
+.exam-explanation-tools, .exam-explanation-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+.exam-explanation-tools { justify-content: space-between; }
+.exam-explanation-controls .square, .dialog-head .square { flex: none; width: 44px; min-height: 44px; }
+.exam-explanation-page { min-width: 44px; text-align: center; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.exam-explanation-frame { max-height: 66dvh; min-height: 90px; overflow: auto; overscroll-behavior: contain; background: var(--canvas); border: 1px solid var(--line); border-radius: 5px; }
+.exam-explanation-page-image { position: relative; overflow: hidden; background: var(--paper); }
+.exam-explanation-image { position: absolute; left: 0; width: 100%; height: auto; }
+.exam-explanation-loading, .exam-explanation-error { padding: 12px; }
+.exam-explanation-error { display: grid; justify-items: start; gap: 8px; }
+.exam-explanation-recap summary { min-height: 44px; padding: 10px 0; cursor: pointer; }
+.exam-explanation-answers { margin: 0; padding: 0; list-style: none; }
+.exam-explanation-answers li { display: grid; grid-template-columns: 26px 20px minmax(0, 1fr); gap: 5px; padding: 5px 8px; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.exam-explanation-answers li[aria-current] { background: var(--mint); color: var(--green); }
+.exam-explanation-context { margin: 4px 0; padding-inline-start: 9px; border-inline-start: 2px solid var(--line); font: 16px/1.6 Georgia, serif; }
 .search-results { margin-top: 9px; display: grid; gap: 4px; }
 .search-result { display: grid; grid-template-columns: minmax(0, 1fr) auto 16px; align-items: center; gap: 8px; width: 100%; min-height: 50px; text-align: left; background: var(--paper); border: 0; border-bottom: 1px solid var(--line); }
 .search-result:hover { background: var(--canvas); }

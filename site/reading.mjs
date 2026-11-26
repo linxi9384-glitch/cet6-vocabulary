@@ -8,7 +8,7 @@ const irregular = {
   break: ['broke', 'broken'], come: ['came'], draw: ['drew', 'drawn'],
   feed: ['fed'], flee: ['fled'], forbid: ['forbade', 'forbidden'],
   foresee: ['foresaw', 'foreseen'], give: ['gave', 'given'], grow: ['grew', 'grown'],
-  lay: ['laid'], lead: ['led'], lie: ['lay', 'lain'], rise: ['rose', 'risen'],
+  lay: ['laid'], lead: ['led'], lie: ['lay', 'lain'], make: ['made'], rise: ['rose', 'risen'],
   seek: ['sought'], shed: ['shed'], shrink: ['shrank', 'shrunk'], sink: ['sank', 'sunk'],
   spin: ['spun'], spring: ['sprang', 'sprung'], stick: ['stuck'],
   stride: ['strode', 'stridden'], strive: ['strove', 'striven'],

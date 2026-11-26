@@ -31,7 +31,13 @@ jobs:
       - name: Generate daily reading
         env:
           CET6_READING_API_KEY: ${{ secrets.CET6_READING_API_KEY }}
-        run: node scripts/generate-reading.mjs
+        run: |
+          reading_date="$(TZ=Asia/Shanghai date +%F)"
+          if ! node scripts/generate-reading.mjs "$reading_date"; then
+            echo "Reading generation failed, retrying in 20 seconds."
+            sleep 20
+            node scripts/generate-reading.mjs "$reading_date"
+          fi
       - name: Save passage in the archive
         run: |
           git add -- site/readings

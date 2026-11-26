@@ -26,6 +26,13 @@ test('recognizes inflections and usable forms of vocabulary phrases', () => {
   assert.equal(vocabularyMatches('A catapult and a catalogue.', { en: 'cat' }).length, 0);
 });
 
+test('recognizes the past tense of make for sth in the daily selection', () => {
+  const entry = selectWords(bank, '2026-11-26').find(word => word.en === 'make for sth');
+  assert.ok(entry);
+  assert.equal(vocabularyMatches('The quiet setting made for a better discussion.', entry)[0]?.text, 'made for a better discussion');
+  assert.deepEqual(vocabularyMatches('The panel made a decision.', entry), []);
+});
+
 test('rejects passages with omitted vocabulary even if the title contains it', () => {
   const paragraphs = Array.from({ length: 4 }, () => 'garden '.repeat(110).trim());
   const draft = { title: 'A forgotten landmark', paragraphs };

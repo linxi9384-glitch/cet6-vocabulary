@@ -1,4 +1,4 @@
-const cacheName = 'cet6-study-v13';
+const cacheName = 'cet6-study-v14';
 const additions = ['2024-06', '2024-12', '2025-06', '2025-12'];
 const assets = [
   './', './index.html', './style.css', './app.mjs', './study.mjs', './reading.mjs', './bank.json',

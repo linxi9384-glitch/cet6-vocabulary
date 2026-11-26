@@ -507,6 +507,36 @@ def exam_topics(context, screenshots=None, scan_path=None, check_offline=True):
     page.close()
 
 
+def exam_listening(context):
+    page = context.new_page()
+    page.goto(ROOT + "#exams/2023-06-1")
+    player = page.get_by_label("听力音频播放器", exact=True)
+    expect(player).to_be_visible()
+    expect(player).to_have_attribute("preload", "none")
+    expect(player).to_have_attribute("src", re.compile(r"/2023-06/01/listen\.m4a$"))
+    expect(page.get_by_role("link", name="音频来源")).to_have_attribute("href", re.compile(r"/2023-06/01/meta\.json$"))
+    page.get_by_role("button", name="下一题", exact=True).click()
+    expect(player).to_be_visible()
+    page.get_by_role("button", name="选词填空", exact=True).click()
+    expect(player).to_be_hidden()
+    page.get_by_role("link", name="试卷原页", exact=True).click()
+    expect(player).to_be_visible()
+    expect(player).to_have_attribute("src", re.compile(r"/2023-06/01/listen\.m4a$"))
+    page.get_by_role("link", name="专题练习", exact=True).click()
+    page.locator('a[href="#topics/listening/2024-06-1"]').click()
+    expect(player).to_have_attribute("src", re.compile(r"/2024-06/02/listen\.m4a$"))
+    no_overflow(page)
+    page.get_by_label("选择本地音频", exact=True).set_input_files(
+        {"name": "local.mp3", "mimeType": "audio/mpeg", "buffer": b"ID3"}
+    )
+    expect(player).to_have_attribute("src", re.compile(r"^blob:"))
+    page.get_by_role("button", name="切换到在线音频", exact=True).click()
+    expect(player).to_have_attribute("src", re.compile(r"/2024-06/02/listen\.m4a$"))
+    page.goto(ROOT + "#exams/2025-12-3/scan")
+    expect(player).to_have_count(0)
+    page.close()
+
+
 if __name__ == "__main__":
     screenshots = Path(sys.argv[1]) if len(sys.argv) > 1 else None
     pdf = Path(sys.argv[2]) if len(sys.argv) > 2 else None
@@ -520,9 +550,11 @@ if __name__ == "__main__":
         exam_practice(browser.new_context(viewport={"width": 820, "height": 1180}, has_touch=True), screenshots)
         exams(browser.new_context(viewport={"width": 820, "height": 1180}, has_touch=True), pdf, screenshots)
         exam_topics(browser.new_context(viewport={"width": 390, "height": 844}, has_touch=True), screenshots, recent_pdf)
+        exam_listening(browser.new_context(viewport={"width": 390, "height": 844}, has_touch=True))
         device_layout(browser, screenshots)
         browser.close()
         webkit = playwright.webkit.launch()
         exam_topics(webkit.new_context(viewport={"width": 820, "height": 1180}, has_touch=True), screenshots, check_offline=False)
+        exam_listening(webkit.new_context(viewport={"width": 820, "height": 1180}, has_touch=True))
         webkit.close()
     print("Verified vocabulary choices, handwritten spacing, dictation, exams, daily reading, backup and offline use.")

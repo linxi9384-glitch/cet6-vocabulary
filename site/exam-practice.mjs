@@ -1,4 +1,5 @@
 import { blankExam, examChoices, examExplanationGroup, examFirst, examPositionCount, examQuestionCount, examSectionsFor, gradeExam, validExamContent, writtenLimit } from './exams.mjs';
+import { examAudioPlayer, mountExamAudio } from './exam-audio.mjs';
 import { showExamExplanation } from './exam-explanation.mjs';
 
 const writingPosition = examQuestionCount + 1;
@@ -19,7 +20,6 @@ export function mountExamPractice(root, paper, state, { html, icon, persist, con
   let position = run.position ?? first;
   let content;
   let materialKey;
-  let audioUrl;
   const lifecycle = new AbortController();
 
   root.innerHTML = `<div class="exam-practice">
@@ -46,14 +46,7 @@ export function mountExamPractice(root, paper, state, { html, icon, persist, con
             ).join('')}</div></div>`
         ).join('')}</div>
       </details>
-      <details class="exam-practice-audio" hidden>
-        <summary>听力音频</summary>
-        <label class="button exam-practice-audio-file">${icon('headphones')} 选择音频
-          <input type="file" accept="audio/*,.mp3,.m4a">
-        </label>
-        <audio controls preload="metadata" aria-label="听力音频播放器" hidden></audio>
-        <p class="muted exam-practice-audio-status" role="status" hidden></p>
-      </details>
+      ${first === 1 ? examAudioPlayer(paper, { html, icon }, true) : ''}
       <div class="exam-practice-layout">
         <section class="exam-practice-material" aria-labelledby="exam-practice-material-title" hidden></section>
         <div class="exam-practice-current">
@@ -76,10 +69,7 @@ export function mountExamPractice(root, paper, state, { html, icon, persist, con
   const overview = work.querySelector('.exam-practice-overview');
   const numbers = work.querySelectorAll('.exam-practice-number');
   const sectionButtons = work.querySelectorAll('.exam-practice-section');
-  const audioPanel = work.querySelector('.exam-practice-audio');
-  const audio = audioPanel.querySelector('audio');
-  const audioFile = audioPanel.querySelector('input');
-  const audioStatus = audioPanel.querySelector('.exam-practice-audio-status');
+  const listeningAudio = mountExamAudio(work, paper);
   const layout = work.querySelector('.exam-practice-layout');
   const material = work.querySelector('.exam-practice-material');
   const question = work.querySelector('.exam-practice-question');
@@ -267,9 +257,7 @@ ${html(run[field])}</textarea>
       if (Number(button.dataset.examPracticeGo) === position) button.setAttribute('aria-current', 'step');
       else button.removeAttribute('aria-current');
     }
-    const listening = section.first === 1;
-    if (!listening && !audioPanel.hidden && audioUrl) audio.pause();
-    audioPanel.hidden = !listening;
+    listeningAudio?.setVisible(section.first === 1);
     updateMaterial();
     if (position <= examQuestionCount) renderObjective();
     else renderWritten(section);
@@ -335,14 +323,7 @@ ${html(run[field])}</textarea>
 
   work.addEventListener('change', event => {
     const target = event.target;
-    if (target === audioFile && target.files[0]) {
-      if (audioUrl) URL.revokeObjectURL(audioUrl);
-      audioUrl = URL.createObjectURL(target.files[0]);
-      audioStatus.hidden = true;
-      audio.src = audioUrl;
-      audio.hidden = false;
-      target.value = '';
-    } else if (!run.submitted && target.name === 'exam-practice-answer' && target.checked) {
+    if (!run.submitted && target.name === 'exam-practice-answer' && target.checked) {
       updateAnswer(target.value);
     }
   });
@@ -389,27 +370,16 @@ ${html(run[field])}</textarea>
         position = first;
         overview.open = false;
         save();
-        if (audioUrl && audio.readyState) {
-          audio.pause();
-          audio.currentTime = 0;
-        }
+        listeningAudio?.reset();
         refreshRun();
         focusQuestion();
       });
     }
   });
 
-  audio.addEventListener('error', () => {
-    audioStatus.textContent = '无法播放此音频，请重新选择。';
-    audioStatus.hidden = false;
-    audio.hidden = true;
-  });
-
   loadContent();
   return () => {
     lifecycle.abort();
-    if (!audioUrl) return;
-    audio.pause();
-    URL.revokeObjectURL(audioUrl);
+    listeningAudio?.destroy();
   };
 }

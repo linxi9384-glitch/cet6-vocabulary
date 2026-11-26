@@ -1,4 +1,5 @@
 import { blankExam, examChoices, examFirst, examQuestionCount, examScan, examSectionsFor, gradeExam, papers, writtenLimit } from './exams.mjs';
+import { examAudioPlayer, mountExamAudio } from './exam-audio.mjs';
 import { importExamPdf, restoreExamPdf } from './exam-pdf.mjs';
 
 const status = { correct: '答对', wrong: '答错', skipped: '未作答' };
@@ -34,7 +35,6 @@ export function mountExams(root, id, state, { html, icon, persist, confirm }) {
   let renderTask;
   let importing = false;
   let zoomed = false;
-  let audioUrl;
 
   root.innerHTML = `<a class="back" href="#exams">${icon('arrow-left')} 返回真题目录</a>
     <section class="section-head"><h1>${paper.title}</h1><a class="button" href="#exams/${paper.id}">${icon('list-checks')} 网页答题</a></section>
@@ -55,10 +55,7 @@ export function mountExams(root, id, state, { html, icon, persist, confirm }) {
           <button class="button exam-jump" type="button" data-exam-action="sheet">${icon('list-checks')} 答题卡</button>
         </div>
         <div class="exam-scan" tabindex="0" aria-label="试卷预览" hidden></div>
-        <details class="exam-audio"><summary>听力音频</summary>
-          <label class="button exam-file-button">${icon('headphones')} 选择音频<input type="file" id="exam-audio-file" accept="audio/*,.mp3,.m4a"></label>
-          <audio controls hidden></audio>
-        </details>
+        ${examAudioPlayer(paper, { html, icon })}
       </section>
       <section class="exam-sheet" aria-label="真题答题卡"></section>
     </div>`;
@@ -69,7 +66,7 @@ export function mountExams(root, id, state, { html, icon, persist, confirm }) {
   const tools = work.querySelector('.exam-page-tools');
   const note = work.querySelector('.exam-file-status');
   const hint = work.querySelector('.exam-file-hint');
-  const audio = work.querySelector('audio');
+  const listeningAudio = mountExamAudio(work, paper);
 
   function save() {
     (state.exams ??= {})[id] = run;
@@ -202,12 +199,6 @@ export function mountExams(root, id, state, { html, icon, persist, confirm }) {
         target.value = '';
         target.disabled = false;
       }
-    } else if (target.id === 'exam-audio-file' && target.files[0]) {
-      if (audioUrl) URL.revokeObjectURL(audioUrl);
-      audioUrl = URL.createObjectURL(target.files[0]);
-      audio.src = audioUrl;
-      audio.hidden = false;
-      target.value = '';
     }
   });
 
@@ -250,6 +241,7 @@ export function mountExams(root, id, state, { html, icon, persist, confirm }) {
         run = blankExam(paper);
         sectionIndex = 0;
         showWrong = false;
+        listeningAudio?.reset();
         save();
         renderSheet();
         sheet.querySelector('h2').focus({ preventScroll: true });
@@ -282,7 +274,6 @@ export function mountExams(root, id, state, { html, icon, persist, confirm }) {
     revision += 1;
     renderTask?.cancel();
     resize.disconnect();
-    audio.pause();
-    if (audioUrl) URL.revokeObjectURL(audioUrl);
+    listeningAudio?.destroy();
   };
 }

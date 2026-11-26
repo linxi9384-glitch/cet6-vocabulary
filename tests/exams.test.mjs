@@ -41,6 +41,29 @@ test('an omitted listening section is neither selectable nor scored as unanswere
   assert.deepEqual(gradeExam(paper, blankExam(paper)), { correct: 0, wrong: 0, skipped: 30 });
 });
 
+test('recordings cover every playable listening section and match the source editions', async () => {
+  const { examAudio } = await import('../site/exam-audio-data.mjs');
+  const { examFirst, papers } = await import('../site/exams.mjs');
+  const ids = papers.filter(paper => examFirst(paper) === 1).map(paper => paper.id);
+  assert.deepEqual(Object.keys(examAudio).sort(), ids.sort());
+  const hashes = new Set();
+  for (const [id, track] of Object.entries(examAudio)) {
+    assert.match(track.sha256, /^[a-f0-9]{64}$/, id);
+    assert.ok(track.bytes > 0 && Number.isSafeInteger(track.bytes), id);
+    assert.ok(!hashes.has(track.sha256), id);
+    hashes.add(track.sha256);
+    for (const url of [track.url, track.fallbackUrl, track.originalUrl, track.sourceUrl]) {
+      assert.equal(new URL(url).protocol, 'https:', id);
+    }
+    assert.notEqual(track.url, track.fallbackUrl, id);
+  }
+  assert.match(examAudio['2024-06-1'].sourceUrl, /2024-06\/02\/meta\.json$/);
+  assert.match(examAudio['2024-06-2'].sourceUrl, /2024-06\/01\/meta\.json$/);
+  assert.equal(examAudio['2024-06-1'].sha256, 'fac9987f4ecb6ba750134dcb05e6553b8b8afb6d9da8febd3c31cdf0a435b74c');
+  assert.equal(examAudio['2024-06-2'].sha256, '98f87cce756cf13824d13b3014b9d62294327d7d3d2784f01b8ba83483b73517');
+  assert.match(examAudio['2022-09-1'].sourceUrl, /1e5e11\/CET46-Resources\//);
+});
+
 test('topic saves are restricted to one paper and question type', async () => {
   const { validExamTopicRuns } = await import('../site/exams.mjs');
   assert.ok(validExamTopicRuns({ '2023-06-1:matching': { position: 37, answers: { 36: 'C' }, writing: '', translation: '', submitted: true } }));

@@ -240,18 +240,22 @@ input[type="text"], input[type="search"], select { background: var(--paper); bor
 .exam-surface-head, .exam-page-tools, .exam-sheet-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .exam-surface-head { justify-content: space-between; margin-bottom: 10px; }
 .exam-surface-head h2 { font-size: 19px; }
-.exam-file-button, .exam-practice-audio-file { position: relative; cursor: pointer; min-height: 44px; }
-.exam-file-button:focus-within, .exam-practice-audio-file:focus-within { outline: 2px solid var(--green); outline-offset: 2px; }
-.exam-file-button input, .exam-practice-audio-file input { position: absolute; inset: 0; width: 100%; opacity: 0; cursor: pointer; }
+.exam-file-button { position: relative; cursor: pointer; min-height: 44px; }
+.exam-file-button:focus-within { outline: 2px solid var(--green); outline-offset: 2px; }
+.exam-file-button input { position: absolute; inset: 0; width: 100%; opacity: 0; cursor: pointer; }
 .exam-file-status:empty { display: none; }
 .exam-file-status, .exam-file-hint { margin-bottom: 8px; overflow-wrap: anywhere; }
 .exam-page-tools { margin: 8px 0; }
 .exam-page-tools .square { width: 44px; min-height: 44px; flex-shrink: 0; }
 .exam-scan { background: var(--paper); width: 100%; min-height: 90px; overflow: auto; box-shadow: 0 0 0 1px var(--line); }
 .exam-scan canvas { display: block; max-width: none; height: auto; }
-.exam-audio { margin-top: 10px; color: var(--muted); }
-.exam-audio summary { cursor: pointer; min-height: 44px; padding: 10px 0; }
-.exam-audio audio { display: block; width: 100%; max-width: 320px; margin: 6px 0; }
+.exam-listening-player { display: grid; gap: 5px; padding-block: 10px; border-top: 1px solid var(--line); min-width: 0; }
+.exam-document .exam-listening-player { margin-top: 10px; }
+.exam-listening-player audio { display: block; width: min(100%, 420px); min-height: 44px; }
+.exam-listening-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 5px 12px; }
+.exam-listening-actions .button, .exam-listening-actions a { min-height: 44px; }
+.exam-listening-actions a { display: inline-flex; align-items: center; font-size: 13px; }
+.exam-listening-status { overflow-wrap: anywhere; }
 .exam-sheet-tools { justify-content: space-between; margin: 12px 0; }
 .exam-section-body { border-top: 1px solid var(--line); }
 .exam-answer-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 48px; padding: 5px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
@@ -273,8 +277,8 @@ input[type="text"], input[type="search"], select { background: var(--paper); bor
 .exam-practice-section[aria-current] { background: var(--mint); color: var(--green); border-color: #8fb19d; }
 .exam-practice-progress { min-height: 22px; color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
 .exam-practice-progress .result-metrics { margin-block: 0; }
-.exam-practice-overview, .exam-practice-audio { border-block-start: 1px solid var(--line); }
-.exam-practice-overview summary, .exam-practice-audio summary {
+.exam-practice-overview { border-block-start: 1px solid var(--line); }
+.exam-practice-overview summary {
   min-height: 44px; padding-block: 11px; cursor: pointer; color: var(--green); font-size: 14px; font-weight: 650;
 }
 .exam-practice-overview-body { display: grid; gap: 12px; padding-bottom: 14px; }
@@ -287,9 +291,6 @@ input[type="text"], input[type="search"], select { background: var(--paper); bor
 .exam-practice [data-result="answered"], .exam-practice [data-result="correct"] { background: var(--mint); border-color: #83ae94; color: var(--green); }
 .exam-practice [data-result="wrong"] { background: var(--orange); border-color: #ca9674; color: #863c22; }
 .exam-practice-number[aria-current], .exam-practice-blank[aria-current] { box-shadow: inset 0 0 0 1px var(--green); border-color: var(--green); }
-.exam-practice-audio .button, .exam-practice-audio audio { margin-bottom: 8px; }
-.exam-practice-audio audio { display: block; width: min(100%, 380px); }
-.exam-practice-audio-status { margin-bottom: 8px; }
 .exam-practice-layout { display: grid; align-items: start; gap: 14px; }
 .exam-practice-material, .exam-practice-question { min-width: 0; border-top: 1px solid var(--line); padding-top: 12px; }
 .exam-practice-current { min-width: 0; width: 100%; max-width: 730px; }

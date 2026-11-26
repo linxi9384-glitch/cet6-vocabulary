@@ -69,7 +69,11 @@ export function mountExamPractice(root, paper, state, { html, icon, persist, con
   const overview = work.querySelector('.exam-practice-overview');
   const numbers = work.querySelectorAll('.exam-practice-number');
   const sectionButtons = work.querySelectorAll('.exam-practice-section');
-  const listeningAudio = mountExamAudio(work, paper);
+  const listeningAudio = mountExamAudio(work, paper, {
+    onSegment({ first, last }) {
+      if (position < first || position > last) goTo(first, false);
+    },
+  });
   const layout = work.querySelector('.exam-practice-layout');
   const material = work.querySelector('.exam-practice-material');
   const question = work.querySelector('.exam-practice-question');
@@ -280,14 +284,14 @@ ${html(run[field])}</textarea>
     heading.focus({ preventScroll: true });
   }
 
-  function goTo(number) {
+  function goTo(number, focus = true) {
     if (!content || number < first || number > last) return;
     if (position !== number) {
       position = number;
       save();
       renderPosition();
     }
-    focusQuestion();
+    if (focus) focusQuestion();
   }
 
   function updateAnswer(value) {

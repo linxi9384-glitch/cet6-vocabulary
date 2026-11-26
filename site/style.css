@@ -251,6 +251,11 @@ input[type="text"], input[type="search"], select { background: var(--paper); bor
 .exam-scan canvas { display: block; max-width: none; height: auto; }
 .exam-listening-player { display: grid; gap: 5px; padding-block: 10px; border-top: 1px solid var(--line); min-width: 0; }
 .exam-document .exam-listening-player { margin-top: 10px; }
+.exam-listening-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 116px), 1fr)); gap: 5px; }
+.exam-listening-group { min-height: 44px; padding: 4px 8px; justify-content: flex-start; text-align: start; }
+.exam-listening-group span { display: grid; gap: 1px; }
+.exam-listening-group small { color: var(--muted); font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.exam-listening-group[aria-current] { background: var(--mint); color: var(--green); border-color: #8fb19d; }
 .exam-listening-player audio { display: block; width: min(100%, 420px); min-height: 44px; }
 .exam-listening-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 5px 12px; }
 .exam-listening-actions .button, .exam-listening-actions a { min-height: 44px; }

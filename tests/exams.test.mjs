@@ -64,6 +64,20 @@ test('recordings cover every playable listening section and match the source edi
   assert.match(examAudio['2022-09-1'].sourceUrl, /1e5e11\/CET46-Resources\//);
 });
 
+test('each listening track has ordered segments covering all 25 questions', async () => {
+  const { examAudio, listeningGroups } = await import('../site/exam-audio-data.mjs');
+  assert.deepEqual(listeningGroups?.map(({ first, last }) => [first, last]),
+    [[1, 4], [5, 8], [9, 11], [12, 15], [16, 18], [19, 21], [22, 25]]);
+  for (const [id, track] of Object.entries(examAudio)) {
+    assert.equal(track.segments?.length, listeningGroups.length, id);
+    let previousEnd = 0;
+    for (const [start, end] of track.segments) {
+      assert.ok(Number.isFinite(start) && Number.isFinite(end) && start > previousEnd && end > start, id);
+      previousEnd = end;
+    }
+  }
+});
+
 test('topic saves are restricted to one paper and question type', async () => {
   const { validExamTopicRuns } = await import('../site/exams.mjs');
   assert.ok(validExamTopicRuns({ '2023-06-1:matching': { position: 37, answers: { 36: 'C' }, writing: '', translation: '', submitted: true } }));

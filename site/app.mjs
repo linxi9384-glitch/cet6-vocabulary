@@ -1,8 +1,9 @@
 import {
-  assessAnswer, blankState, directions, finishRun, lessonProgress, makeBackup, parseBackup,
-  practiceDirections, shuffledIds, shuffleSizes, startRun,
+  assessAnswer, blankState, directions, draftText, finishRun, lessonProgress, makeBackup, parseBackup,
+  practiceDirections, shuffledIds, shuffleSizes, startRun, wordChoices,
 } from './study.mjs';
 import { isReadingDate, readingDate, vocabularyMatches } from './reading.mjs';
+import { mountExams } from './exam-view.mjs';
 
 const storageKey = 'cet6.study.v1';
 const recordingAccent = 'en-US';
@@ -11,8 +12,8 @@ const dialog = document.querySelector('#dialog');
 const notice = document.querySelector('#notice');
 const chapterNames = ['第一章', '第二章', '第三章', '第四章'];
 const mode = {
-  'zh-en': { label: '中译英', icon: 'pencil-line', input: '输入英文' },
-  'en-zh': { label: '英译中', icon: 'languages', input: '输入中文' },
+  'zh-en': { label: '中译英', title: '中译英默写', icon: 'pencil-line', input: '输入英文' },
+  'en-zh': { label: '英译汉', title: '英译汉选择题', icon: 'languages' },
   dictation: { label: '听写', icon: 'headphones', input: '输入英文' },
 };
 const resultLabel = { correct: '答对', wrong: '答错', skipped: '未作答', pending: '待自评' };
@@ -50,6 +51,7 @@ let playingClip = null;
 let filter = { unit: 0, direction: 'all', history: false };
 let reading = null;
 let highlightReading = false;
+let unmountExam;
 
 function loadState() {
   try {
@@ -90,6 +92,7 @@ function route() {
   }
   if (name === 'errors' || name === 'settings') return { name };
   if (name === 'reading') return { name, date: isReadingDate(raw) ? raw : null };
+  if (name === 'exams') return { name, id: raw };
   const lastChapter = units.get(state.lastUnit)?.chapter ?? 1;
   return { name: 'home', chapter: bank.chapters.some(chapter => chapter.id === id) ? id : lastChapter };
 }
@@ -128,7 +131,7 @@ function updateShell() {
     if (link.dataset.nav === selected) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   }
-  const labels = { home: '单元目录', unit: unitName(page.id), shuffle: '乱序练习', dictation: '听写', reading: '每日阅读', errors: '错题本', review: '错题复测', settings: '设置与备份' };
+  const labels = { home: '单元目录', unit: unitName(page.id), shuffle: '乱序练习', dictation: '听写', reading: '每日阅读', exams: '六级真题', errors: '错题本', review: '错题复测', settings: '设置与备份' };
   document.querySelector('#breadcrumb').innerHTML = `学习空间 ${icon('chevron-right')} <strong>${labels[page.name]}</strong>`;
 }
 
@@ -188,10 +191,10 @@ function previewView() {
     <section class="section-head"><div><p class="eyebrow">${chapterNames[unit.chapter - 1]} / UNIT ${pad(unit.id)}</p><h1>${unitName(unit.id)}</h1></div>
       <button class="button ${done ? 'done-button' : ''}" data-action="preview" aria-pressed="${done}">${icon(done ? 'circle-check' : 'check')}${done ? '已完成预习' : '标记已预习'}</button>
     </section>
-    <div class="directions" aria-label="默写方向">${directions.map(direction => {
+    <div class="directions" aria-label="练习方向">${directions.map(direction => {
       const tally = lessonProgress(state, ids, direction);
       const run = state.runs[`unit:${unit.id}:${direction}`];
-      return `<a class="direction-link" href="${unitPath(unit.id, direction)}"><span class="stat-symbol ${direction === 'zh-en' ? 'green' : 'blue'}">${icon(mode[direction].icon)}</span><span><strong>${mode[direction].label}默写</strong><small>${run && !run.results ? '继续未交卷练习' : `已答对 ${tally.correct} / ${ids.length}`}</small></span>${icon('arrow-right')}</a>`;
+      return `<a class="direction-link" href="${unitPath(unit.id, direction)}"><span class="stat-symbol ${direction === 'zh-en' ? 'green' : 'blue'}">${icon(mode[direction].icon)}</span><span><strong>${mode[direction].title}</strong><small>${run && !run.results ? '继续未交卷练习' : `已答对 ${tally.correct} / ${ids.length}`}</small></span>${icon('arrow-right')}</a>`;
     }).join('')}</div>
     <section class="word-section"><div class="section-head"><h2>词条预习</h2><span class="muted">${ids.length} 个词条</span></div>
       <div class="word-list">${unit.blocks.map(block => `<section class="word-block">
@@ -233,11 +236,27 @@ function drawView() {
     ${rounds.length ? `<section class="settings-section"><h2>最近练习</h2>${rounds.join('')}</section>` : ''}`;
 }
 
+const hasDraft = (run, id) => Boolean(draftText(bank.words, run.drafts[id]).trim());
+
+function choicesView(word, run) {
+  const draft = run.drafts[word.id];
+  const options = wordChoices(bank.words, word.id, run.choiceSeed);
+  return `<fieldset class="choice-list">
+    <legend>选择中文释义</legend>
+    ${options.map((option, index) => `<label class="choice-option">
+      <input type="radio" name="word-choice" data-id="${word.id}" value="${option.id}" ${draft === option.id ? 'checked' : ''}>
+      <span class="choice-letter" aria-hidden="true">${'ABCD'[index]}</span><span>${html(option.gloss)}</span>
+    </label>`).join('')}
+    ${typeof draft === 'string' && draft.trim() ? `<p class="muted">原作答 · ${html(draft)}</p>` : ''}
+  </fieldset>`;
+}
+
 function runView() {
   const review = page.name === 'review';
   const drawn = drawMode(page.name);
   const direction = page.direction;
   const listening = direction === 'dictation';
+  const picking = direction === 'en-zh';
   const key = `${page.name}:${page.id}:${direction}`;
   const existing = state.runs[key];
   if (!existing) {
@@ -251,38 +270,38 @@ function runView() {
   const run = state.runs[key];
   const [back, backLabel, context] = drawn ? [`#${page.name}`, listening ? '返回听写' : '返回乱序练习', shuffleScope(page.id)]
     : review ? ['#errors', '返回错题本', '错题复测'] : [unitPath(page.id), '返回单元', unitName(page.id)];
-  const title = listening ? (review ? '听写复测' : '单词听写') : `${mode[direction].label}${drawn ? '乱序练习' : '默写'}`;
+  const title = listening ? (review ? '听写复测' : '单词听写') : drawn ? `${mode[direction].label}乱序练习` : mode[direction].title;
   const heading = `<a class="back" href="${back}">${icon('arrow-left')} ${backLabel}</a>
     <section class="section-head"><div><p class="eyebrow">${context}</p><h1>${title}</h1></div>
-    ${review || drawn ? '' : `<nav class="segments" aria-label="默写方向">${directions.map(option => `<a href="${unitPath(page.id, option)}" ${option === direction ? 'aria-current="page"' : ''}>${mode[option].label}</a>`).join('')}</nav>`}</section>`;
+    ${review || drawn ? '' : `<nav class="segments" aria-label="练习方向">${directions.map(option => `<a href="${unitPath(page.id, option)}" ${option === direction ? 'aria-current="page"' : ''}>${mode[option].label}</a>`).join('')}</nav>`}</section>`;
   if (run.results) return heading + resultsView(run, drawn);
   const word = bank.words[run.ids[run.index]];
-  const answered = run.ids.filter(id => run.drafts[id]?.trim()).length;
+  const answered = run.ids.filter(id => hasDraft(run, id)).length;
   const prompt = listening
     ? `<div class="question dictation-prompt"><button class="button audio" type="button" data-action="hear">${icon('volume-2')} 播放发音</button></div>`
     : `<div class="question"><p class="eyebrow">${direction === 'zh-en' ? '中文释义' : '英文词条'}</p><div class="question-line"><h2 ${direction === 'en-zh' ? 'lang="en"' : ''}>${html(direction === 'zh-en' ? word.gloss : word.en)}</h2>${direction === 'en-zh' ? speechButton(word) : ''}</div></div>`;
   return heading + `
     <section class="exercise">
-      <div class="exercise-progress"><span>第 <strong>${run.index + 1}</strong> / ${run.ids.length} 题</span><span id="answered">已填写 ${answered} 题</span></div>
+      <div class="exercise-progress"><span>第 <strong>${run.index + 1}</strong> / ${run.ids.length} 题</span><span id="answered">已作答 ${answered} 题</span></div>
       ${meter(run.index + 1, run.ids.length)}
       ${prompt}
-      <label for="answer">${mode[direction].input}</label>
-      <input id="answer" data-id="${word.id}" type="text" maxlength="300" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" lang="${direction === 'en-zh' ? 'zh-CN' : 'en'}" value="${html(run.drafts[word.id])}">
+      ${picking ? choicesView(word, run) : `<label for="answer">${mode[direction].input}</label>
+      <input id="answer" data-id="${word.id}" type="text" maxlength="300" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" lang="en" value="${html(run.drafts[word.id])}">`}
       <div class="exercise-actions"><button class="button square" data-action="step" data-offset="-1" aria-label="上一题" title="上一题" ${run.index === 0 ? 'disabled' : ''}>${icon('arrow-left')}</button><button class="button" data-action="skip">跳过此题</button>
       ${run.index + 1 < run.ids.length ? `<button class="button primary" data-action="step" data-offset="1">下一题 ${icon('arrow-right')}</button>` : `<button class="button primary" data-action="submit">${icon('check')} 交卷核对</button>`}</div>
     </section>
-    <div class="exercise-footer"><nav class="question-index" aria-label="题号">${run.ids.map((id, index) => `<button type="button" class="${run.drafts[id]?.trim() ? 'filled' : ''}" data-action="question" data-index="${index}" ${index === run.index ? 'aria-current="step"' : ''} aria-label="第 ${index + 1} 题">${index + 1}</button>`).join('')}</nav>${run.index + 1 < run.ids.length ? `<button class="button" data-action="submit">${icon('check')} 交卷核对</button>` : ''}</div>`;
+    <div class="exercise-footer"><nav class="question-index" aria-label="题号">${run.ids.map((id, index) => `<button type="button" class="${hasDraft(run, id) ? 'filled' : ''}" data-action="question" data-index="${index}" ${index === run.index ? 'aria-current="step"' : ''} aria-label="第 ${index + 1} 题">${index + 1}</button>`).join('')}</nav>${run.index + 1 < run.ids.length ? `<button class="button" data-action="submit">${icon('check')} 交卷核对</button>` : ''}</div>`;
 }
 
 function resultsView(run, shuffle) {
   const tally = Object.values(run.results);
   return `<section class="result-section"><div class="section-head"><h2>交卷结果</h2><button class="button" data-action="restart">${icon(shuffle ? 'shuffle' : 'rotate-ccw')} ${shuffle ? '重新抽题' : '重练本组'}</button></div>
-    <div class="result-metrics">${Object.entries(resultLabel).filter(([status]) => run.direction !== 'dictation' || status !== 'pending').map(([status, label]) => `<span class="${status}"><strong>${tally.filter(item => item === status).length}</strong> ${label}</span>`).join('')}</div>
+    <div class="result-metrics">${Object.entries(resultLabel).filter(([status]) => status !== 'pending' || tally.includes('pending')).map(([status, label]) => `<span class="${status}"><strong>${tally.filter(item => item === status).length}</strong> ${label}</span>`).join('')}</div>
     <div class="word-list">${run.ids.map(id => {
       const word = bank.words[id];
       const status = run.results[id];
       return `<article class="result-row"><div class="result-word"><span class="result-tag ${status}">${resultLabel[status]}</span><strong lang="en">${html(word.en)}</strong>${speechButton(word)}</div>
-        <div><p>${html(word.gloss)}</p>${word.notes ? `<small>${html(word.notes)}</small>` : ''}<p class="your-answer">你的答案 <strong>${html(run.drafts[id]?.trim() || '未作答')}</strong></p></div>
+        <div><p>${html(word.gloss)}</p>${word.notes ? `<small>${html(word.notes)}</small>` : ''}<p class="your-answer">你的答案 <strong>${html(draftText(bank.words, run.drafts[id]).trim() || '未作答')}</strong></p></div>
         ${status === 'pending' ? `<div class="assessment" aria-label="自评 ${html(word.en)}"><button class="button" data-action="assess" data-id="${id}" data-result="wrong">${icon('x')} 判为错</button><button class="button primary" data-action="assess" data-id="${id}" data-result="correct">${icon('check')} 判为对</button></div>` : ''}
       </article>`;
     }).join('')}</div></section>`;
@@ -389,12 +408,14 @@ function settingsView() {
   return `<section class="section-head"><div><p class="eyebrow">SETTINGS / 本机学习</p><h1>设置与备份</h1></div></section>
     <section class="settings-section"><h2>发音</h2><div class="setting-row"><div><strong>美式英语</strong><small id="voice-source">${voiceSource()}</small></div>
       <button class="button" data-action="sample">${icon('volume-2')} 试听</button></div></section>
-    <section class="settings-section"><h2>学习记录</h2><div class="setting-row"><div><strong>导出备份</strong><small>预习、默写进度和错题</small></div><button class="button" data-action="export">${icon('download')} 导出 JSON</button></div>
+    <section class="settings-section"><h2>学习记录</h2><div class="setting-row"><div><strong>导出备份</strong><small>练习进度、真题答题卡和错题</small></div><button class="button" data-action="export">${icon('download')} 导出 JSON</button></div>
       <div class="setting-row"><div><strong>导入备份</strong><small>用备份替换当前记录</small></div><input id="import-file" type="file" accept="application/json,.json" hidden><button class="button" data-action="import">${icon('upload')} 选择备份</button></div></section>
     <section class="settings-section"><h2>离线使用</h2><div class="setting-row"><div><strong>页面与词库</strong><small id="offline-status">正在检查缓存状态…</small></div><span class="stat-symbol green">${icon('hard-drive')}</span></div></section>`;
 }
 
 function render({ top = false } = {}) {
+  unmountExam?.();
+  unmountExam = null;
   currentRun = null;
   updateShell();
   const renderView = {
@@ -407,7 +428,14 @@ function render({ top = false } = {}) {
     errors: errorsView,
     settings: settingsView,
   }[page.name];
-  view.innerHTML = renderView();
+  if (page.name === 'exams') {
+    unmountExam = mountExams(view, page.id, state, { html, icon, persist,
+      confirm: (title, message, label, action) => showDialog(title,
+        `<p>${html(message)}</p><div class="dialog-actions"><button class="button" data-action="close">取消</button><button class="button primary" data-action="confirm">${html(label)}</button></div>`, action),
+    });
+  } else {
+    view.innerHTML = renderView();
+  }
   updateOfflineLabel();
   const title = view.querySelector('h1');
   if (title) document.title = `${title.textContent} · 六级词本`;
@@ -678,15 +706,19 @@ document.addEventListener('submit', event => {
   }
 });
 
+function updateDraft(id, answer) {
+  const run = activeRun();
+  if (!run || run.results || id !== run.ids[run.index]) return;
+  run.drafts[id] = answer;
+  persist();
+  const count = run.ids.filter(wordId => hasDraft(run, wordId)).length;
+  document.querySelector('#answered').textContent = `已作答 ${count} 题`;
+  view.querySelector('[aria-current="step"]').classList.toggle('filled', hasDraft(run, id));
+}
+
 document.addEventListener('input', event => {
   if (event.target.id === 'search-term') searchResults();
-  if (event.target.id !== 'answer') return;
-  const run = activeRun();
-  run.drafts[event.target.dataset.id] = event.target.value.slice(0, 300);
-  persist();
-  const count = run.ids.filter(id => run.drafts[id]?.trim()).length;
-  document.querySelector('#answered').textContent = `已填写 ${count} 题`;
-  view.querySelector('[aria-current="step"]').classList.toggle('filled', Boolean(event.target.value.trim()));
+  if (event.target.id === 'answer') updateDraft(Number(event.target.dataset.id), event.target.value.slice(0, 300));
 });
 
 document.addEventListener('keydown', event => {
@@ -699,6 +731,12 @@ document.addEventListener('keydown', event => {
 
 document.addEventListener('change', event => {
   const input = event.target;
+  if (input.name === 'word-choice' && input.checked) {
+    const id = Number(input.dataset.id);
+    updateDraft(id, Number(input.value));
+    input.closest('.choice-list').querySelector('.muted')?.remove();
+    return;
+  }
   if (input.id === 'error-unit') filter.unit = Number(input.value);
   else if (input.id === 'error-direction') filter.direction = input.value;
   else if (input.id === 'error-history') filter.history = input.checked;

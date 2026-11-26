@@ -48,23 +48,28 @@ def study(context, screenshots):
     page.get_by_role("button", name="交卷核对", exact=True).click()
     expect(page.get_by_text("1 答错", exact=True)).to_be_visible()
     expect(page.get_by_text("13 未作答", exact=True)).to_be_visible()
-    open_page(page, page.get_by_role("link", name="英译中", exact=True), "英译中默写")
-    page.get_by_role("textbox", name="输入中文").fill("养分")
+    open_page(page, page.get_by_role("link", name="英译汉", exact=True), "英译汉选择题")
+    expect(page.get_by_role("radio")).to_have_count(4)
+    correct = page.get_by_role("radio", name=re.compile("营养摄入"))
+    correct.check()
+    expect(page.get_by_text("已作答 1 题", exact=True)).to_be_visible()
+    page.get_by_role("button", name="下一题", exact=True).click()
+    page.get_by_role("button", name="上一题", exact=True).click()
+    page.reload()
+    expect(correct).to_be_checked()
     page.get_by_role("button", name="交卷核对", exact=True).click()
-    expect(page.get_by_text("1 待自评", exact=True)).to_be_visible()
-    page.get_by_role("button", name="判为对", exact=True).click()
     expect(page.get_by_text("1 答对", exact=True)).to_be_visible()
     open_page(page, page.get_by_role("link", name=re.compile("^错题本")), "错题本")
     expect(page.get_by_text("1 道待复测", exact=True)).to_be_visible()
     expect(page.locator(".result-row")).to_have_count(1)
     expect(page.get_by_text("nutriton", exact=True)).to_be_visible()
     open_page(page, page.get_by_role("button", name="中译英复测 (1)", exact=True), "中译英默写")
-    page.get_by_role("textbox", name="输入英文").fill("  NUTRITION  ")
+    page.get_by_role("textbox", name="输入英文").fill("  NU TRI\u00a0TION  ")
     page.get_by_role("button", name="交卷核对", exact=True).click()
     expect(page.get_by_text("1 答对", exact=True)).to_be_visible()
     open_page(page, page.get_by_role("link", name="返回错题本", exact=True), "错题本")
     page.get_by_role("checkbox", name="含已掌握").check()
-    expect(page.get_by_text("最近复测 答对 (NUTRITION)", exact=False)).to_be_visible()
+    expect(page.get_by_text("最近复测 答对 (NU TRI TION)", exact=False)).to_be_visible()
     open_page(page, page.get_by_role("link", name="设置与备份", exact=True), "设置与备份")
     expect(page.get_by_text("已缓存，可离线打开。", exact=False)).to_be_visible()
     with page.expect_download() as download:
@@ -140,13 +145,19 @@ def shuffle(context):
     open_page(page, page.get_by_role("link", name="返回乱序练习", exact=True), "乱序练习")
     page.get_by_label("答题方向").select_option("en-zh")
     page.get_by_role("button", name="开始练习", exact=True).click()
-    expect(page.get_by_role("heading", name="英译中乱序练习", exact=True)).to_be_visible()
+    expect(page.get_by_role("heading", name="英译汉乱序练习", exact=True)).to_be_visible()
     expect(page.get_by_text("第 1 / 20 题", exact=True)).to_be_visible()
     expect(page.get_by_role("button", name=re.compile("^朗读 "))).to_be_visible()
-    page.get_by_role("textbox", name="输入中文").fill("wrong shuffle answer")
+    choices = page.get_by_role("radio")
+    expect(choices).to_have_count(4)
+    asked = choices.first.get_attribute("data-id")
+    choices.locator("xpath=self::input[@value!='" + asked + "']").first.check()
     page.get_by_role("button", name="交卷核对", exact=True).click()
-    expect(page.get_by_text("1 待自评", exact=True)).to_be_visible()
-    page.get_by_role("button", name="判为对", exact=True).click()
+    expect(page.get_by_text("1 答错", exact=True)).to_be_visible()
+    open_page(page, page.get_by_role("link", name=re.compile("^错题本")), "错题本")
+    open_page(page, page.get_by_role("button", name="英译汉复测 (1)", exact=True), "英译汉选择题")
+    page.locator(f'input[name="word-choice"][value="{asked}"]').check()
+    page.get_by_role("button", name="交卷核对", exact=True).click()
     expect(page.get_by_text("1 答对", exact=True)).to_be_visible()
     page.close()
 
@@ -207,7 +218,8 @@ def dictation(context, screenshots=None):
     open_page(page, page.get_by_role("button", name="听写复测 (1)", exact=True), "听写复测")
     expect(prompt).to_have_text("播放发音")
     expect(answer).to_have_attribute("data-id", first_id)
-    answer.fill(bank["words"][first_id]["en"])
+    spelling = bank["words"][first_id]["en"]
+    answer.fill(spelling[:2] + " " + spelling[2:])
     page.get_by_role("button", name="交卷核对", exact=True).click()
     expect(page.get_by_text("1 答对", exact=True)).to_be_visible()
     open_page(page, page.get_by_role("link", name="返回错题本", exact=True), "错题本")
@@ -231,7 +243,7 @@ def device_layout(browser, screenshots):
         expect(page.locator(".word-row")).to_have_count(14)
         no_overflow(page)
         page.goto(ROOT + "#unit/64/en-zh")
-        expect(page.get_by_role("textbox", name="输入中文")).to_be_visible()
+        expect(page.get_by_role("radio")).to_have_count(4)
         no_overflow(page)
         open_page(page, page.get_by_role("link", name="乱序练习", exact=True), "乱序练习")
         no_overflow(page)
@@ -276,14 +288,90 @@ def reading(context, screenshots=None):
     page.close()
 
 
+def exams(context, pdf_path=None, screenshots=None):
+    page = context.new_page()
+    errors = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    page.goto(ROOT + "#exams")
+    page.wait_for_function("navigator.serviceWorker.controller !== null")
+    expect(page.locator(".exam-list-row")).to_have_count(6)
+    page.get_by_role("link", name=re.compile("2023 年 6 月第 1 套")).click()
+    expect(page.get_by_role("heading", name="2023 年 6 月第 1 套")).to_be_visible()
+    expect(page.get_by_label("第 1 题", exact=True).locator("option")).to_have_count(5)
+    page.get_by_label("第 1 题", exact=True).select_option("B")
+    page.get_by_label("第 2 题", exact=True).select_option("A")
+    expect(page.get_by_text("已作答 2 / 55 题")).to_be_visible()
+    page.get_by_label("题型", exact=True).select_option("1")
+    expect(page.get_by_label("第 26 题", exact=True).locator("option")).to_have_count(16)
+    page.get_by_label("第 26 题", exact=True).select_option("N")
+    page.get_by_label("题型", exact=True).select_option("4")
+    page.get_by_label("写作", exact=True).fill("My written practice.")
+
+    pdf = page.locator("#exam-file")
+    pdf.set_input_files({"name": "wrong.pdf", "mimeType": "application/pdf", "buffer": b"%PDF-wrong"})
+    expect(page.get_by_text(re.compile("请选择《集训刷题卷"))).to_be_visible()
+    canvas = page.locator(".exam-scan canvas")
+    if pdf_path:
+        pdf.set_input_files(pdf_path)
+        expect(page.get_by_text("试卷已保存在本机", exact=True)).to_be_visible(timeout=45000)
+        expect(canvas).to_have_attribute("aria-label", "试卷第 1 页", timeout=45000)
+        assert canvas.evaluate("""
+            c => {
+                const {data} = c.getContext('2d').getImageData(0, 0, c.width, c.height);
+                for (let i = 0; i < data.length; i += 36) {
+                    if (data[i] < 100 && data[i + 3] > 0) return true;
+                }
+                return false;
+            }
+        """)
+        page.get_by_role("button", name="放大试卷").click()
+        page.wait_for_function("document.querySelector('.exam-scan').scrollWidth > document.querySelector('.exam-scan').clientWidth")
+        page.get_by_role("button", name="适应宽度").click()
+        page.get_by_label("卷内页码").select_option("9")
+        expect(canvas).to_have_attribute("aria-label", "试卷第 7 页")
+        masked_height = int(canvas.get_attribute("height"))
+        if screenshots:
+            page.locator(".exam-document").scroll_into_view_if_needed()
+            page.screenshot(path=screenshots / f"cet6-exam-{page.viewport_size['width']}.png")
+    no_overflow(page)
+    page.reload()
+    expect(page.get_by_label("第 1 题", exact=True)).to_have_value("B")
+    if pdf_path:
+        expect(canvas).to_have_attribute("aria-label", "试卷第 7 页", timeout=45000)
+    page.get_by_label("题型", exact=True).select_option("4")
+    expect(page.get_by_label("写作", exact=True)).to_have_value("My written practice.")
+    page.get_by_label("题型", exact=True).select_option("0")
+    page.get_by_role("button", name="交卷核对", exact=True).click()
+    page.get_by_role("button", name="确认交卷", exact=True).click()
+    expect(page.get_by_text("2 答对", exact=True)).to_be_visible()
+    expect(page.get_by_text("1 答错", exact=True)).to_be_visible()
+    expect(page.get_by_text("52 未作答", exact=True)).to_be_visible()
+    page.get_by_role("checkbox", name="错题和漏题").check()
+    expect(page.locator(".exam-answer-row")).to_have_count(24)
+    if pdf_path:
+        page.wait_for_function(f"document.querySelector('.exam-scan canvas').height > {masked_height}")
+    context.set_offline(True)
+    assert page.reload().from_service_worker
+    expect(page.get_by_text("2 答对", exact=True)).to_be_visible()
+    if pdf_path:
+        expect(canvas).to_have_attribute("aria-label", "试卷第 7 页", timeout=45000)
+    page.get_by_role("button", name="重做本套", exact=True).click()
+    page.get_by_role("button", name="确认重做", exact=True).click()
+    expect(page.get_by_label("第 1 题", exact=True)).to_have_value("")
+    assert not errors, errors
+    page.close()
+
+
 if __name__ == "__main__":
     screenshots = Path(sys.argv[1]) if len(sys.argv) > 1 else None
+    pdf = Path(sys.argv[2]) if len(sys.argv) > 2 else None
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch()
         study(browser.new_context(viewport={"width": 1440, "height": 960}), screenshots)
         shuffle(browser.new_context(viewport={"width": 820, "height": 1180}))
         dictation(browser.new_context(viewport={"width": 390, "height": 844}, has_touch=True), screenshots)
         reading(browser.new_context(viewport={"width": 390, "height": 844}, has_touch=True), screenshots)
+        exams(browser.new_context(viewport={"width": 820, "height": 1180}, has_touch=True), pdf, screenshots)
         device_layout(browser, screenshots)
         browser.close()
-    print("Verified study, shuffle, dictation audio, daily reading, retest, backup, offline reload and four touch viewport sizes.")
+    print("Verified vocabulary choices, handwritten spacing, dictation, exams, daily reading, backup and offline use.")

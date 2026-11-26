@@ -28,6 +28,46 @@ test('normalizes English spacing and accepts only listed variants', () => {
   assert.equal(checkAnswer(word, 'zh-en', 'take parts'), 'wrong');
 });
 
+test('English fill-ins tolerate iPad handwriting whitespace without forgiving misspellings', () => {
+  const nutrition = bank.words[1];
+  for (const direction of ['zh-en', 'dictation']) {
+    assert.equal(checkAnswer(nutrition, direction, 'nu\u00a0tri\u3000tion'), 'correct');
+    assert.equal(checkAnswer(word, direction, 'ta ke pa\u200brt in'), 'correct');
+    assert.equal(checkAnswer(nutrition, direction, 'nutri ton'), 'wrong');
+    assert.equal(checkAnswer(nutrition, direction, '\u200b\u3000'), 'skipped');
+  }
+});
+
+test('English-to-Chinese selections grade directly and preserve old typed rounds', async () => {
+  const { wordChoices } = await import('../site/study.mjs');
+  const state = blankState();
+  const ids = bank.chapters[0].units[0].blocks.flatMap(block => block.ids);
+  const key = 'unit:1:en-zh';
+  const run = startRun(state, key, 'en-zh', ids);
+  const [rightId, wrongId] = ids;
+  const options = wordChoices(bank.words, wrongId, run.choiceSeed);
+  assert.equal(options.length, 4);
+  assert.equal(new Set(options.map(option => option.gloss)).size, 4);
+  assert.equal(options.filter(option => option.id === wrongId).length, 1);
+  assert.deepEqual(wordChoices(bank.words, wrongId, run.choiceSeed), options);
+  run.drafts[rightId] = rightId;
+  const selected = options.find(option => option.id !== wrongId);
+  run.drafts[wrongId] = selected.id;
+  const restored = parseBackup(JSON.stringify(makeBackup(state, bank)), bank);
+  const grades = finishRun(restored, restored.runs[key], bank.words, () => 1);
+  assert.equal(grades[rightId], 'correct');
+  assert.equal(grades[wrongId], 'wrong');
+  assert.equal(restored.errors['en-zh:' + wrongId].lastAnswer, selected.gloss);
+  run.drafts[wrongId] = 9999;
+  assert.throws(() => parseBackup(JSON.stringify(makeBackup(state, bank)), bank));
+  delete run.choiceSeed;
+  run.drafts[rightId] = '营养';
+  run.drafts[wrongId] = '待考证';
+  const legacy = finishRun(state, run, bank.words, () => 1);
+  assert.equal(legacy[rightId], 'correct');
+  assert.equal(legacy[wrongId], 'pending');
+});
+
 test('accepts dictionary senses and asks for self-assessment on unmatched Chinese', () => {
   assert.equal(checkAnswer(word, 'en-zh', '参与。'), 'correct');
   assert.equal(checkAnswer(word, 'en-zh', '参加；参与'), 'correct');

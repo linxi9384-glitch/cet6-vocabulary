@@ -59,6 +59,7 @@ jobs:
 
   deploy:
     needs: package
+    if: ${{ !cancelled() && needs.package.result == 'success' }}
     runs-on: ubuntu-latest
     environment:
       name: github-pages

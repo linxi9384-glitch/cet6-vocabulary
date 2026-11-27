@@ -21,6 +21,7 @@ export function mountExamPractice(root, paper, state, { html, icon, persist, con
   let content;
   let materialKey;
   let optionClickTimer;
+  let pendingOption;
   const lifecycle = new AbortController();
 
   root.innerHTML = `<div class="exam-practice">
@@ -344,16 +345,39 @@ ${html(run[field])}</textarea>
     question.querySelector('.exam-practice-count').textContent = `${wordCount(run[field])} 词`;
   });
 
-  work.addEventListener('click', event => {
+  function takePendingOption() {
     clearTimeout(optionClickTimer);
+    const radio = pendingOption;
+    pendingOption = null;
+    return radio;
+  }
+
+  function commitPendingOption() {
+    const radio = takePendingOption();
+    if (radio?.isConnected && document.getSelection()?.isCollapsed) radio.click();
+  }
+
+  const listenerOptions = { signal: lifecycle.signal };
+  document.addEventListener('click', event => {
+    if (event.detail > 1 && pendingOption?.closest('.exam-practice-option').contains(event.target)) {
+      takePendingOption();
+    } else {
+      commitPendingOption();
+    }
+  }, { ...listenerOptions, capture: true });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) commitPendingOption();
+  }, listenerOptions);
+  window.addEventListener('pagehide', commitPendingOption, listenerOptions);
+
+  work.addEventListener('click', event => {
     const option = event.target.closest('.exam-practice-option');
     if (option && !event.target.closest('.exam-practice-pick')) {
       const radio = option.querySelector('input');
       if (!radio.disabled && event.detail <= 1 && document.getSelection()?.isCollapsed) {
         // Wait for the second click before treating selectable text as an answer.
-        optionClickTimer = setTimeout(() => {
-          if (radio.isConnected && document.getSelection()?.isCollapsed) radio.click();
-        }, 320);
+        pendingOption = radio;
+        optionClickTimer = setTimeout(commitPendingOption, 320);
       }
     }
     const button = event.target.closest('button');
@@ -398,7 +422,7 @@ ${html(run[field])}</textarea>
 
   loadContent();
   return () => {
-    clearTimeout(optionClickTimer);
+    commitPendingOption();
     lifecycle.abort();
     listeningAudio?.destroy();
   };

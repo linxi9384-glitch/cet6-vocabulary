@@ -491,6 +491,39 @@ def exam_practice(context, screenshots=None, check_offline=True):
     page.close()
 
 
+def exam_quick_answers(context):
+    page = context.new_page()
+    paper_route = ROOT + "#exams/2023-06-1"
+    page.goto(paper_route)
+    expect(page.get_by_role("heading", name="第 1 题", exact=True)).to_be_visible()
+    page.evaluate("""() => {
+        document.querySelectorAll('.exam-practice-option-text')[1].click();
+        document.querySelector('[data-exam-practice-action="next"]').click();
+    }""")
+    expect(page.get_by_role("heading", name="第 2 题", exact=True)).to_be_visible()
+    expect(page.get_by_text("已作答 1 / 55 题", exact=True)).to_be_visible()
+    page.evaluate("""() => {
+        document.querySelector('.exam-practice-option-text').click();
+        document.querySelector('[data-nav="exams"]').click();
+    }""")
+    expect(page.get_by_role("heading", name="六级真题", exact=True)).to_be_visible()
+    page.close()
+
+    page = context.new_page()
+    page.goto(paper_route)
+    expect(page.get_by_role("heading", name="第 2 题", exact=True)).to_be_visible()
+    expect(page.get_by_role("radio").first).to_be_checked()
+    page.get_by_role("button", name="上一题", exact=True).click()
+    expect(page.get_by_role("radio").nth(1)).to_be_checked()
+    page.evaluate("""() => {
+        document.querySelectorAll('.exam-practice-option-text')[2].click();
+        window.dispatchEvent(new PageTransitionEvent('pagehide'));
+    }""")
+    page.reload()
+    expect(page.get_by_role("radio").nth(2)).to_be_checked()
+    page.close()
+
+
 def exams(context, pdf_path=None, screenshots=None):
     page = context.new_page()
     errors = []
@@ -691,6 +724,7 @@ if __name__ == "__main__":
         dictation(browser.new_context(viewport={"width": 390, "height": 844}, has_touch=True), screenshots)
         reading(browser.new_context(viewport={"width": 390, "height": 844}, has_touch=True), screenshots)
         exam_practice(browser.new_context(viewport={"width": 820, "height": 1180}, has_touch=True), screenshots)
+        exam_quick_answers(browser.new_context(viewport={"width": 390, "height": 844}, has_touch=True))
         exams(browser.new_context(viewport={"width": 820, "height": 1180}, has_touch=True), pdf, screenshots)
         exam_topics(browser.new_context(viewport={"width": 390, "height": 844}, has_touch=True), screenshots, recent_pdf)
         exam_listening(browser.new_context(viewport={"width": 390, "height": 844}, has_touch=True))
@@ -700,6 +734,7 @@ if __name__ == "__main__":
         device_layout(browser, screenshots)
         browser.close()
         webkit = playwright.webkit.launch()
+        exam_quick_answers(webkit.new_context(viewport={"width": 820, "height": 1180}, has_touch=True))
         exam_topics(webkit.new_context(viewport={"width": 820, "height": 1180}, has_touch=True), screenshots, check_offline=False)
         exam_listening(webkit.new_context(viewport={"width": 820, "height": 1180}, has_touch=True))
         word_lookup(webkit.new_context(viewport={"width": 820, "height": 1180}, has_touch=True), screenshots)

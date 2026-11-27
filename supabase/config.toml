@@ -1,0 +1,5 @@
+project_id = "cet6-vocabulary"
+
+[auth]
+site_url = "https://linxi9384-glitch.github.io/cet6-vocabulary/"
+enable_signup = false

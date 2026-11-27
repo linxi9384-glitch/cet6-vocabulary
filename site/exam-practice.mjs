@@ -421,9 +421,37 @@ ${html(run[field])}</textarea>
   });
 
   loadContent();
-  return () => {
+  function unmount() {
     commitPendingOption();
     lifecycle.abort();
     listeningAudio?.destroy();
+  }
+  unmount.flush = commitPendingOption;
+  unmount.updateFromSync = () => {
+    const updated = storage[runKey] ?? blankExam(paper);
+    const nextPosition = updated.position ?? first;
+    const previous = run;
+    const textarea = question.querySelector('textarea');
+    run = updated;
+    if (!content) {
+      position = nextPosition;
+      return;
+    }
+    if (nextPosition !== position || updated.submitted !== previous.submitted) {
+      position = nextPosition;
+      refreshRun();
+      return;
+    }
+    updateProgress();
+    for (const button of numbers) updateNumber(button, Number(button.dataset.examPracticeGo));
+    if (position <= examQuestionCount && updated.answers[position] !== previous.answers[position]) renderObjective();
+    if (textarea) {
+      const text = updated[textarea.dataset.examPracticeWritten];
+      if (textarea.value !== text) {
+        textarea.value = text;
+        question.querySelector('.exam-practice-count').textContent = `${wordCount(text)} 词`;
+      }
+    }
   };
+  return unmount;
 }

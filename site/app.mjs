@@ -9,6 +9,8 @@ import { mountExamPractice } from './exam-practice.mjs';
 import { renderExamTopics } from './exam-topics.mjs';
 import { findDefinition, normalizeLookup, saveWord } from './word-lookup.mjs';
 import { mountStudyTimer } from './study-timer.mjs';
+import { createExamSync, sameExamProgress } from './exam-sync.mjs';
+import { accountConfig } from './account-config.mjs';
 
 const storageKey = 'cet6.study.v1';
 const recordingAccent = 'en-US';
@@ -59,6 +61,13 @@ let filter = { unit: 0, direction: 'all', history: false };
 let reading = null;
 let highlightReading = false;
 let unmountExam;
+let accountStorage;
+try { accountStorage = window.localStorage; } catch {}
+const account = createExamSync({ ...accountConfig, storage: accountStorage });
+let syncTimer;
+let syncRunning = false;
+let accountMessage = '';
+let signingIn = false;
 
 function loadState() {
   try {
@@ -77,6 +86,97 @@ function persist() {
   } catch {
     storageProblem = true;
     toast('本机保存失败，请导出备份。');
+  }
+}
+
+function examProgress() {
+  unmountExam?.flush?.();
+  return { exams: state.exams ?? {}, examTopics: state.examTopics ?? {} };
+}
+
+function persistExam() {
+  persist();
+  scheduleSync();
+}
+
+function applyExamProgress(progress) {
+  const previous = { exams: { ...state.exams }, examTopics: { ...state.examTopics } };
+  for (const group of ['exams', 'examTopics']) {
+    const runs = state[group] ??= {};
+    for (const id of Object.keys(runs)) {
+      if (!Object.hasOwn(progress[group], id)) delete runs[id];
+    }
+    Object.assign(runs, progress[group]);
+  }
+  persist();
+  if (unmountExam?.updateFromSync) unmountExam.updateFromSync();
+  else if (page.name === 'topics' || page.name === 'exams') {
+    if (!page.id || !sameExamProgress({ exams: { [page.id]: previous.exams[page.id] } },
+      { exams: { [page.id]: progress.exams[page.id] } })) render();
+  }
+}
+
+function updateAccountStatus(message = accountMessage) {
+  accountMessage = message;
+  const status = view.querySelector('#account-status');
+  if (status) status.textContent = accountStatus();
+}
+
+function accountStatus() {
+  if (accountMessage) return accountMessage;
+  if (!account.configured) return '账号服务尚未开通。';
+  if (!account.signedIn) return '登录后同步真题和专题作答。';
+  return navigator.onLine ? '等待同步' : '离线 · 作答保存在本机';
+}
+
+function scheduleSync(delay = 900) {
+  if (!account.signedIn) return;
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(syncExams, delay);
+}
+
+async function syncExams() {
+  if (!account.signedIn || !state || syncRunning) return;
+  if (!navigator.onLine) {
+    updateAccountStatus('离线 · 作答保存在本机');
+    return;
+  }
+  syncRunning = true;
+  updateAccountStatus('正在同步…');
+  try {
+    const needsRetry = await account.sync(examProgress, applyExamProgress);
+    if (account.signedIn) updateAccountStatus(needsRetry ? '等待同步' : '已同步 · ' + displayDate(Date.now()));
+    if (needsRetry) scheduleSync();
+  } catch {
+    if (account.signedIn) updateAccountStatus('同步失败 · 作答仍保存在本机');
+    else if (accountMessage) {
+      accountMessage = '登录已过期，请重新登录。';
+      if (page.name === 'settings') render();
+    }
+  } finally {
+    syncRunning = false;
+  }
+}
+
+async function signInAccount(form) {
+  if (signingIn) return;
+  signingIn = true;
+  form.querySelector('button').disabled = true;
+  const data = new FormData(form);
+  form.elements.password.value = '';
+  updateAccountStatus('正在登录…');
+  try {
+    await account.signIn(String(data.get('username')), String(data.get('password')));
+    accountMessage = '';
+    if (page.name === 'settings') render();
+    await syncExams();
+  } catch (error) {
+    const unreachable = error instanceof TypeError || error.name === 'TimeoutError';
+    updateAccountStatus(unreachable ? '无法连接账号服务，请检查网络。' : error.message);
+  } finally {
+    signingIn = false;
+    const loginButton = view.querySelector('#account-login button');
+    if (loginButton) loginButton.disabled = false;
   }
 }
 
@@ -413,7 +513,20 @@ async function loadReading(requestedPage) {
 }
 
 function settingsView() {
+  const login = !account.configured ? '' : account.signedIn
+    ? `<div class="account-actions">
+        <button class="button" type="button" data-action="sync-exams">${icon('refresh-cw')} 立即同步</button>
+        <button class="button" type="button" data-action="sign-out">${icon('log-out')} 退出</button>
+      </div>`
+    : `<form id="account-login" class="account-actions">
+        <label>账号<input type="text" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>
+        <label>密码<input type="password" name="password" autocomplete="current-password" required></label>
+        <button class="button primary" type="submit" ${signingIn ? 'disabled' : ''}>${icon('log-in')} 登录</button>
+      </form>`;
   return `<section class="section-head"><div><p class="eyebrow">SETTINGS / 本机学习</p><h1>设置与备份</h1></div></section>
+    <section class="settings-section"><h2>账号与同步</h2><div class="setting-row"><div>
+      <strong>${account.signedIn ? html(account.name) : '真题作答'}</strong><small id="account-status" role="status">${html(accountStatus())}</small>
+      </div>${login}</div></section>
     <section class="settings-section"><h2>发音</h2><div class="setting-row"><div><strong>美式英语</strong><small id="voice-source">${voiceSource()}</small></div>
       <button class="button" data-action="sample">${icon('volume-2')} 试听</button></div></section>
     <section class="settings-section"><h2>学习记录</h2><div class="setting-row"><div><strong>导出备份</strong><small>练习进度、真题答题卡、错题和生词</small></div><button class="button" data-action="export">${icon('download')} 导出 JSON</button></div>
@@ -439,7 +552,7 @@ function render({ top = false } = {}) {
     settings: settingsView,
   }[page.name];
   if (page.name === 'exams' || page.name === 'topics') {
-    const controls = { html, icon, persist, showDialog,
+    const controls = { html, icon, persist: persistExam, showDialog,
       confirm: (title, message, label, action) => showDialog(title,
         `<p>${html(message)}</p><div class="dialog-actions"><button class="button" data-action="close">取消</button><button class="button primary" data-action="confirm">${html(label)}</button></div>`, action),
     };
@@ -712,7 +825,7 @@ async function importData(file) {
     const restored = parseBackup(await file.text(), bank);
     showDialog('恢复学习记录', '<p>导入会替换此浏览器中当前的学习记录和生词本。</p><div class="dialog-actions"><button class="button" data-action="close">取消</button><button class="button primary" data-action="confirm">确认恢复</button></div>', () => {
       state = restored;
-      persist();
+      persistExam();
       render();
       if (!storageProblem) toast('学习记录已恢复。');
     });
@@ -796,6 +909,14 @@ const actions = {
   },
   export: exportData,
   import: () => document.querySelector('#import-file').click(),
+  'sync-exams': syncExams,
+  'sign-out': async () => {
+    clearTimeout(syncTimer);
+    const logout = account.signOut();
+    accountMessage = '';
+    render();
+    await logout;
+  },
   close: () => dialog.close(),
   confirm: () => {
     dialog.close();
@@ -809,6 +930,11 @@ document.addEventListener('click', event => {
 });
 
 document.addEventListener('submit', event => {
+  if (event.target.id === 'account-login') {
+    event.preventDefault();
+    signInAccount(event.target);
+    return;
+  }
   const name = event.target.dataset.draw;
   if (!drawMode(name)) return;
   event.preventDefault();
@@ -964,10 +1090,21 @@ async function main() {
     wordUnits = new Map([...units.values()].flatMap(unit => idsOf(unit).map(id => [id, unit.id])));
     state = loadState();
     openRoute();
+    scheduleSync(0);
     if (storageProblem) toast('无法读取本机学习记录，请检查浏览器存储或恢复备份。');
     window.addEventListener('hashchange', openRoute);
     window.addEventListener('online', updateOfflineLabel);
     window.addEventListener('offline', updateOfflineLabel);
+    window.addEventListener('online', () => scheduleSync(0));
+    window.addEventListener('offline', () => {
+      if (account.signedIn) updateAccountStatus('离线 · 作答保存在本机');
+    });
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) scheduleSync(0);
+    });
+    if (account.configured) setInterval(() => {
+      if (!document.hidden) syncExams();
+    }, 30000);
     window.addEventListener('storage', event => {
       if (event.key !== storageKey && event.key !== null) return;
       state = loadState();

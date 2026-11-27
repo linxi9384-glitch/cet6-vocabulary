@@ -8,6 +8,10 @@
 
 进度存放在当前浏览器和站点地址的本地存储中。更换浏览器、域名或端口前，可在设置中导出 JSON，再在新地址导入。
 
+单账号同步配置好后，设置页可登录 `WhiteMu`。整套真题与专题练习的答题卡、答题位置、交卷状态和草稿会跨设备同步，并继续保存在本机。
+
+部署账号服务时，在专用 Supabase 项目执行 `supabase/migrations/20261127_exam_progress.sql`，启用邮箱密码登录并关闭公开注册。通过 Authentication → Users 添加并确认内部账号 `whitemu@cet6.invalid`，在后台设置其初始密码。将项目 URL 与公开的 publishable key 填入 `site/account-config.mjs` 后发布站点。账号密码和服务端密钥仅在服务端管理。
+
 每日阅读、网页真题和专题练习使用同一个生词本，生词随学习记录备份。英汉释义优先使用六级词库，并以 ECDICT（MIT，许可证见 `site/dictionary/LICENSE.txt`）补充。`python scripts/export-dictionary.py <ecdict.csv>` 可重建词典文件。
 
 真题模块收录 18 套试卷，包含《集训刷题卷（历年真题）》以及 2024、2025 年 6 月和 12 月的试题。整套真题和专题练习各自保存作答进度。题头的「解析」可查看配套讲解或原卷答案，详细讲解可放大和翻页。「试卷原页」可导入对应 PDF，文件保存在当前设备。作答、进度和写作、翻译草稿包含在学习记录备份中。试卷预览使用 Apache-2.0 许可的 PDF.js 6.5.438（legacy build），资源位于 `site/vendor/pdfjs`。

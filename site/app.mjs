@@ -722,6 +722,7 @@ async function importData(file) {
 }
 
 const actions = {
+  'force-refresh': forceRefresh,
   'remove-word': button => {
     delete state.wordbook[button.dataset.word];
     persist();
@@ -869,6 +870,56 @@ document.addEventListener('change', event => {
   document.getElementById(input.id)?.focus({ preventScroll: true });
 });
 
+async function forceRefresh(button) {
+  if (!navigator.onLine) {
+    toast('请联网后再刷新。');
+    return;
+  }
+  button.disabled = true;
+  button.setAttribute('aria-busy', 'true');
+  toast('正在联网刷新…');
+  const lifetime = new AbortController();
+  let channel;
+  let timeout;
+  try {
+    const workers = navigator.serviceWorker;
+    const registration = await workers?.getRegistration();
+    const worker = workers?.controller;
+    if (registration && worker) {
+      const updated = new Promise(resolve => {
+        workers.addEventListener('controllerchange', () => {
+          if (workers.controller && workers.controller !== worker) resolve();
+        }, { signal: lifetime.signal });
+      });
+      const refreshed = (async () => {
+        await registration.update();
+        if (lifetime.signal.aborted || workers.controller !== worker) return;
+        channel = new MessageChannel();
+        await new Promise((resolve, reject) => {
+          channel.port1.onmessage = ({ data }) => data?.ok ? resolve() : reject(new Error('Refresh failed'));
+          worker.postMessage({ type: 'refresh-site' }, [channel.port2]);
+        });
+      })();
+      const deadline = new Promise((_, reject) => {
+        timeout = setTimeout(() => reject(new Error('Refresh timed out')), 30000);
+      });
+      await Promise.race([updated, refreshed, deadline]);
+    } else {
+      const response = await fetch('./index.html', { cache: 'reload', signal: AbortSignal.timeout(20000) });
+      if (!response.ok) throw new Error('Page unavailable');
+    }
+    location.reload();
+  } catch {
+    toast('刷新失败，请检查网络后重试。');
+    button.disabled = false;
+    button.removeAttribute('aria-busy');
+  } finally {
+    lifetime.abort();
+    clearTimeout(timeout);
+    channel?.port1.close();
+  }
+}
+
 let offlineLabel = '正在准备离线缓存…';
 function updateOfflineLabel() {
   const target = document.querySelector('#offline-status');
@@ -898,7 +949,7 @@ function prepareOffline() {
       if (worker.state === 'redundant') failed();
     });
   };
-  navigator.serviceWorker.register('./sw.js').then(registration => {
+  navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).then(registration => {
     inspect(registration.active ?? registration.waiting ?? registration.installing);
     registration.addEventListener('updatefound', () => inspect(registration.installing));
   }).catch(failed);

@@ -261,6 +261,42 @@ def study_timer(context):
     page.close()
 
 
+def force_refresh(context, check_offline=True):
+    page = context.new_page()
+    route = ROOT + "#exams/2023-06-1"
+    page.goto(route)
+    expect(page.get_by_role("heading", name="第 1 题", exact=True)).to_be_visible()
+    page.wait_for_function("navigator.serviceWorker.controller !== null")
+    page.get_by_role("radio").first.tap()
+    page.get_by_role("button", name="开始计时", exact=True).click()
+    refresh = page.get_by_role("button", name="强制刷新", exact=True)
+    expect(refresh).to_be_visible()
+    no_overflow(page)
+    if check_offline:
+        context.set_offline(True)
+        refresh.click()
+        expect(page.get_by_role("status").filter(has_text="请联网后再刷新")).to_be_visible()
+        expect(page.get_by_role("radio").first).to_be_checked()
+        context.set_offline(False)
+        page.wait_for_function("navigator.onLine")
+    page.evaluate("""async () => {
+        const registration = await navigator.serviceWorker.ready;
+        const name = (await caches.keys()).find(item => item.startsWith('cet6-study-'));
+        const cache = await caches.open(name);
+        await cache.put(new URL('index.html', registration.scope), new Response('<h1>Outdated</h1>', {
+            headers: { 'Content-Type': 'text/html; charset=utf-8' },
+        }));
+    }""")
+    with page.expect_navigation(wait_until="domcontentloaded", timeout=35000):
+        refresh.click()
+    assert page.url == route
+    expect(page.get_by_role("heading", name="第 1 题", exact=True)).to_be_visible()
+    expect(page.get_by_role("radio").first).to_be_checked()
+    expect(page.get_by_role("button", name="暂停计时", exact=True)).to_be_visible()
+    expect(refresh).to_be_enabled()
+    page.close()
+
+
 def device_layout(browser, screenshots):
     for width, height in [(820, 1180), (1180, 820), (390, 844), (320, 640)]:
         page = browser.new_page(viewport={"width": width, "height": height}, has_touch=True)
@@ -660,6 +696,7 @@ if __name__ == "__main__":
         exam_listening(browser.new_context(viewport={"width": 390, "height": 844}, has_touch=True))
         word_lookup(browser.new_context(viewport={"width": 390, "height": 844}, has_touch=True), screenshots)
         study_timer(browser.new_context(viewport={"width": 320, "height": 640}, has_touch=True))
+        force_refresh(browser.new_context(viewport={"width": 320, "height": 640}, has_touch=True))
         device_layout(browser, screenshots)
         browser.close()
         webkit = playwright.webkit.launch()
@@ -667,5 +704,6 @@ if __name__ == "__main__":
         exam_listening(webkit.new_context(viewport={"width": 820, "height": 1180}, has_touch=True))
         word_lookup(webkit.new_context(viewport={"width": 820, "height": 1180}, has_touch=True), screenshots)
         study_timer(webkit.new_context(viewport={"width": 820, "height": 1180}, has_touch=True))
+        force_refresh(webkit.new_context(viewport={"width": 820, "height": 1180}, has_touch=True), check_offline=False)
         webkit.close()
     print("Verified vocabulary choices, handwritten spacing, dictation, exams, daily reading, backup and offline use.")

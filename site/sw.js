@@ -1,4 +1,4 @@
-const cacheName = 'cet6-study-v16';
+const cacheName = 'cet6-study-v17';
 const additions = ['2024-06', '2024-12', '2025-06', '2025-12'];
 const assets = [
   './', './index.html', './style.css', './app.mjs', './study.mjs', './reading.mjs', './word-lookup.mjs', './study-timer.mjs', './bank.json',
@@ -13,6 +13,16 @@ const assets = [
 ];
 const shell = new URL('./index.html', self.registration.scope).href;
 const assetUrls = new Set(assets.map(asset => new URL(asset, self.registration.scope).href));
+let refreshing;
+
+function refreshShell() {
+  refreshing ??= caches.open(cacheName).then(cache => {
+    const signal = AbortSignal.timeout(24000);
+    const requests = [...assetUrls].map(url => new Request(url, { cache: 'reload', signal }));
+    return cache.addAll(requests);
+  }).finally(() => { refreshing = null; });
+  return refreshing;
+}
 
 async function fetchReading(request) {
   const cache = await caches.open(cacheName);
@@ -35,7 +45,13 @@ async function fetchExplanation(request) {
 }
 
 self.addEventListener('install', event => {
-  event.waitUntil(caches.open(cacheName).then(cache => cache.addAll(assets)).then(() => self.skipWaiting()));
+  event.waitUntil(refreshShell().then(() => self.skipWaiting()));
+});
+
+self.addEventListener('message', event => {
+  const port = event.ports[0];
+  if (event.data?.type !== 'refresh-site' || !port || !event.source?.url?.startsWith(self.registration.scope)) return;
+  event.waitUntil(refreshShell().then(() => port.postMessage({ ok: true }), () => port.postMessage({ ok: false })));
 });
 
 self.addEventListener('activate', event => {

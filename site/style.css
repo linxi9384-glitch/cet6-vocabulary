@@ -218,6 +218,18 @@ input[type="text"], input[type="search"], select { background: var(--paper); bor
 .reading-pair + .reading-pair { margin-top: 24px; }
 .reading-translation { margin-top: 8px; padding-inline-start: 12px; border-inline-start: 2px solid var(--line); color: var(--muted); font-size: 15px; line-height: 1.8; }
 .reading-body mark { color: inherit; background: #f9eadc; box-decoration-break: clone; }
+[data-lookup-text] { -webkit-user-select: text; user-select: text; cursor: text; }
+.lookup-selection { position: fixed; bottom: max(16px, env(safe-area-inset-bottom)); right: max(16px, env(safe-area-inset-right));
+  z-index: 9; min-height: 44px; max-width: calc(100% - 32px); box-shadow: 0 3px 14px #193a302c; }
+.lookup-selection > span { white-space: nowrap; }
+.lookup-selection bdi { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.lookup-definition, .wordbook-row p { white-space: pre-line; overflow-wrap: anywhere; }
+.wordbook-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+.wordbook-row { display: flex; gap: 10px; align-items: center; justify-content: space-between; padding-block: 12px; border-bottom: 1px solid var(--line); }
+.wordbook-row h2 { font-size: 18px; margin-bottom: 4px; }
+.wordbook-row p { color: var(--muted); }
+.wordbook-actions { display: flex; gap: 4px; flex: none; }
+.wordbook-actions .square { width: 44px; min-height: 44px; }
 .reading-glossary { margin-top: 14px; }
 .reading-glossary summary { cursor: pointer; min-height: 44px; padding: 10px 0; font-weight: 650; }
 .reading-glossary dl { margin: 0; border-top: 1px solid var(--line); }
@@ -319,18 +331,19 @@ input[type="text"], input[type="search"], select { background: var(--paper); bor
 .exam-practice-choices--compact { grid-template-columns: repeat(auto-fit, minmax(min(100%, 128px), 1fr)); }
 .exam-practice-choices--compact:not(:has(.exam-practice-option-text)) { grid-template-columns: repeat(auto-fit, minmax(48px, 1fr)); }
 .exam-practice-option {
-  position: relative; display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 48px; padding: 6px 9px;
-  border: 1px solid var(--line); border-radius: 7px; background: var(--paper); cursor: pointer;
+  display: flex; align-items: center; gap: 2px; min-width: 0; min-height: 48px; padding: 1px 8px 1px 1px;
+  border: 1px solid var(--line); border-radius: 7px; background: var(--paper);
 }
 .exam-practice-option:hover { border-color: #8fb19d; }
 .exam-practice-option:focus-within { outline: 2px solid var(--green); outline-offset: 2px; }
 .exam-practice-option:has(input:checked):not([data-result]) { border-color: #6b9e80; background: var(--mint); }
-.exam-practice-option:has(input:disabled) { cursor: default; }
+.exam-practice-pick { position: relative; display: grid; place-items: center; flex: none; width: 44px; height: 44px; cursor: pointer; }
+.exam-practice-pick:has(input:disabled) { cursor: default; }
 .exam-practice-option input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: inherit; }
 .exam-practice-letter { display: grid; place-items: center; flex: none; width: 27px; height: 27px; border-radius: 5px; background: var(--canvas); font-size: 13px; font-weight: 750; }
 .exam-practice-option input:checked + .exam-practice-letter { background: var(--green); color: var(--paper); }
 .exam-practice-option[data-result="wrong"] input:checked + .exam-practice-letter { background: #863c22; }
-.exam-practice-option:not(:has(.exam-practice-option-text)) { justify-content: center; }
+.exam-practice-option:not(:has(.exam-practice-option-text)) { justify-content: center; padding-inline: 1px; }
 .exam-practice-option-text { font: 16px/1.4 Georgia, serif; overflow-wrap: anywhere; }
 .exam-practice-review { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding-block: 7px 11px; font-size: 14px; }
 .exam-practice-written { display: grid; gap: 6px; margin-top: 14px; }
@@ -457,10 +470,13 @@ dialog:has(.exam-explanation-image) { width: min(820px, calc(100% - 20px)); max-
 
 @media (max-width: 345px) {
   .unit-grid { grid-template-columns: minmax(0, 1fr); }
-  .sidebar { gap: 4px; padding-inline: 8px; }
+  .sidebar { position: relative; gap: 4px; padding-inline: 8px; }
   .brand { min-height: 34px; }
   .brand-symbol { width: 30px; height: 30px; }
   .nav a { padding-inline: 1px; font-size: 11px; }
+  .nav [data-nav="settings"] { position: absolute; top: 3px; right: 8px; width: 44px; min-height: 40px; justify-content: center; }
+  .nav [data-nav="settings"] i { display: inline-block; }
+  .nav [data-nav="settings"] span { display: none; }
   .section-head { flex-wrap: wrap; }
   .topbar { flex-wrap: wrap; }
   .resume-band { min-height: 166px; }

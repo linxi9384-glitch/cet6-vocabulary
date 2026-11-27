@@ -20,6 +20,7 @@ export function mountExamPractice(root, paper, state, { html, icon, persist, con
   let position = run.position ?? first;
   let content;
   let materialKey;
+  let optionClickTimer;
   const lifecycle = new AbortController();
 
   root.innerHTML = `<div class="exam-practice">
@@ -147,10 +148,10 @@ export function mountExamPractice(root, paper, state, { html, icon, persist, con
         paragraphs = content.reading[firstPassage ? 0 : 1].paragraphs.map(html);
       }
       material.innerHTML = key ? `<h2 class="exam-practice-material-title" id="exam-practice-material-title"
-        ${key === 'matching' ? 'lang="en"' : ''}>${html(title)}</h2>
+        ${key === 'matching' ? 'lang="en" data-lookup-text' : ''}>${html(title)}</h2>
         <div class="exam-practice-scroll" tabindex="0" role="region" aria-labelledby="exam-practice-material-title">
           <div class="exam-practice-passage" lang="en">${paragraphs.map(text =>
-            `<p class="exam-practice-paragraph">${text}</p>`).join('')}</div>
+            `<p class="exam-practice-paragraph" data-lookup-text>${text}</p>`).join('')}</div>
         </div>` : '';
     }
     if (key === 'cloze') updateBlanks(true);
@@ -182,12 +183,15 @@ export function mountExamPractice(root, paper, state, { html, icon, persist, con
       ${options.map((text, index) => {
         const letter = letters[index];
         const result = run.submitted && (letter === correctChoice(position) ? 'correct' : letter === selected ? 'wrong' : '');
-        return `<label class="exam-practice-option"${result ? ` data-result="${result}"` : ''}>
-          <input type="radio" name="exam-practice-answer" value="${letter}" ${selected === letter ? 'checked' : ''}
-            ${run.submitted ? 'disabled' : ''} ${text ? '' : `aria-label="段落 ${letter}"`}>
-          <span class="exam-practice-letter">${letter}</span>
-          ${text ? `<span class="exam-practice-option-text" lang="en">${html(text)}</span>` : ''}
-        </label>`;
+        const textId = `exam-choice-${position}-${letter}`;
+        return `<div class="exam-practice-option"${result ? ` data-result="${result}"` : ''}>
+          <label class="exam-practice-pick">
+            <input type="radio" name="exam-practice-answer" value="${letter}" ${selected === letter ? 'checked' : ''}
+              ${run.submitted ? 'disabled' : ''} ${text ? `aria-labelledby="${textId}"` : `aria-label="段落 ${letter}"`}>
+            <span class="exam-practice-letter">${letter}</span>
+          </label>
+          ${text ? `<span class="exam-practice-option-text" id="${textId}" lang="en" data-lookup-text>${html(text)}</span>` : ''}
+        </div>`;
       }).join('')}
     </fieldset>`;
   }
@@ -196,7 +200,7 @@ export function mountExamPractice(root, paper, state, { html, icon, persist, con
     const writing = position === writingPosition;
     const field = writing ? 'writing' : 'translation';
     const prompt = writing
-      ? `<p class="exam-practice-prompt" lang="en">${html(content.writing)}</p>`
+      ? `<p class="exam-practice-prompt" lang="en" data-lookup-text>${html(content.writing)}</p>`
       : content.translation.map(text => `<p class="exam-practice-prompt" lang="zh-CN">${html(text)}</p>`).join('');
     question.innerHTML = `<div class="exam-practice-question-head">
       <h2 class="exam-practice-heading" id="exam-practice-question-title" tabindex="-1">${section.title}</h2>
@@ -241,7 +245,7 @@ ${html(run[field])}</textarea>
           aria-label="清除作答" title="清除作答" ${run.submitted || !run.answers[position] ? 'hidden' : ''}>${icon('x')}</button>
       </div>
     </div>
-    ${prompt ? `<p class="exam-practice-prompt" lang="en">${html(prompt)}</p>` : ''}
+    ${prompt ? `<p class="exam-practice-prompt" lang="en" data-lookup-text>${html(prompt)}</p>` : ''}
     ${run.submitted ? `<div class="exam-practice-review">
       <span class="result-tag ${result}">${resultLabel[result]}</span>
       <span>你的作答 <strong>${selected ?? '无'}</strong></span>
@@ -341,6 +345,17 @@ ${html(run[field])}</textarea>
   });
 
   work.addEventListener('click', event => {
+    clearTimeout(optionClickTimer);
+    const option = event.target.closest('.exam-practice-option');
+    if (option && !event.target.closest('.exam-practice-pick')) {
+      const radio = option.querySelector('input');
+      if (!radio.disabled && event.detail <= 1 && document.getSelection()?.isCollapsed) {
+        // Wait for the second click before treating selectable text as an answer.
+        optionClickTimer = setTimeout(() => {
+          if (radio.isConnected && document.getSelection()?.isCollapsed) radio.click();
+        }, 320);
+      }
+    }
     const button = event.target.closest('button');
     if (!button) return;
     if (button.dataset.examPracticeGo) {
@@ -383,6 +398,7 @@ ${html(run[field])}</textarea>
 
   loadContent();
   return () => {
+    clearTimeout(optionClickTimer);
     lifecycle.abort();
     listeningAudio?.destroy();
   };

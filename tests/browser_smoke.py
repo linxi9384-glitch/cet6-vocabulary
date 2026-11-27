@@ -289,6 +289,62 @@ def reading(context, screenshots=None):
     page.close()
 
 
+def word_lookup(context, screenshots=None):
+    page = context.new_page()
+    page.goto(ROOT + "#reading")
+    english = page.locator(".reading-original").first
+    expect(english).to_be_visible()
+    english.evaluate("""node => {
+        const text = node.firstChild;
+        const open = text.textContent.match(/[A-Za-z]+/);
+        const range = document.createRange();
+        range.setStart(text, open.index);
+        range.setEnd(text, open.index + open[0].length);
+        getSelection().removeAllRanges();
+        getSelection().addRange(range);
+    }""")
+    lookup = page.get_by_role("button", name=re.compile("^查释义"))
+    expect(lookup).to_be_visible()
+    lookup.tap()
+    expect(page.locator(".lookup-definition")).to_contain_text(re.compile(r"[\u4e00-\u9fff]"))
+    page.get_by_role("button", name="加入生词本", exact=True).tap()
+    expect(page.get_by_role("button", name="已加入生词本", exact=True)).to_be_disabled()
+    page.get_by_role("button", name="关闭", exact=True).tap()
+    page.goto(ROOT + "#exams/2023-06-1")
+    option = page.locator(".exam-practice-option-text").first
+    expect(option).to_have_text("It was spacious and tranquil.")
+    option.scroll_into_view_if_needed()
+    box = option.evaluate("""node => {
+        const range = new Range();
+        range.setStart(node.firstChild, 7);
+        range.setEnd(node.firstChild, 15);
+        const rect = range.getBoundingClientRect();
+        return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+    }""")
+    page.mouse.dblclick(box["x"], box["y"])
+    expect(lookup).to_have_text("查释义spacious")
+    expect(page.locator('input[name="exam-practice-answer"]:checked')).to_have_count(0)
+    lookup.tap()
+    expect(page.get_by_role("dialog", name="spacious")).to_be_visible()
+    expect(page.locator(".lookup-definition")).to_have_text(re.compile("宽"))
+    page.get_by_role("button", name="加入生词本", exact=True).tap()
+    if screenshots:
+        page.screenshot(path=screenshots / f"cet6-lookup-{page.viewport_size['width']}.png")
+    page.get_by_role("button", name="关闭", exact=True).tap()
+    expect(page.locator('input[name="exam-practice-answer"]:checked')).to_have_count(0)
+    page.locator(".exam-practice-option-text").nth(1).tap()
+    expect(page.get_by_role("radio").nth(1)).to_be_checked()
+    expect(page.get_by_role("radio").first).not_to_be_checked()
+    page.get_by_role("link", name="生词本", exact=True).click()
+    expect(page.get_by_role("heading", name="spacious", exact=True)).to_be_visible()
+    page.reload()
+    expect(page.get_by_role("heading", name="spacious", exact=True)).to_be_visible()
+    page.get_by_role("button", name="移除 spacious", exact=True).tap()
+    expect(page.get_by_role("heading", name="spacious", exact=True)).to_have_count(0)
+    no_overflow(page)
+    page.close()
+
+
 def exam_practice(context, screenshots=None, check_offline=True):
     page = context.new_page()
     errors = []
@@ -569,10 +625,12 @@ if __name__ == "__main__":
         exams(browser.new_context(viewport={"width": 820, "height": 1180}, has_touch=True), pdf, screenshots)
         exam_topics(browser.new_context(viewport={"width": 390, "height": 844}, has_touch=True), screenshots, recent_pdf)
         exam_listening(browser.new_context(viewport={"width": 390, "height": 844}, has_touch=True))
+        word_lookup(browser.new_context(viewport={"width": 390, "height": 844}, has_touch=True), screenshots)
         device_layout(browser, screenshots)
         browser.close()
         webkit = playwright.webkit.launch()
         exam_topics(webkit.new_context(viewport={"width": 820, "height": 1180}, has_touch=True), screenshots, check_offline=False)
         exam_listening(webkit.new_context(viewport={"width": 820, "height": 1180}, has_touch=True))
+        word_lookup(webkit.new_context(viewport={"width": 820, "height": 1180}, has_touch=True), screenshots)
         webkit.close()
     print("Verified vocabulary choices, handwritten spacing, dictation, exams, daily reading, backup and offline use.")

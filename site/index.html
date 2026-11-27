@@ -27,8 +27,9 @@
         <a href="#reading" data-nav="reading"><i class="icon-book-open" aria-hidden="true"></i><span>阅读</span></a>
         <a href="#exams" data-nav="exams"><i class="icon-file-text" aria-hidden="true"></i><span>真题</span></a>
         <a href="#topics" data-nav="topics"><i class="icon-layout-list" aria-hidden="true"></i><span>专题练习</span></a>
+        <a href="#wordbook" data-nav="wordbook"><i class="icon-book-marked" aria-hidden="true"></i><span>生词本</span></a>
         <a href="#errors" data-nav="errors"><i class="icon-bookmark" aria-hidden="true"></i><span>错题本</span><span id="nav-count" class="nav-count" hidden></span></a>
-        <a href="#settings" data-nav="settings"><i class="icon-settings-2" aria-hidden="true"></i><span>设置与备份</span></a>
+        <a href="#settings" data-nav="settings" aria-label="设置与备份" title="设置与备份"><i class="icon-settings-2" aria-hidden="true"></i><span>设置与备份</span></a>
       </nav>
       <div class="sidebar-footer">
         <div class="sidebar-progress"><span>词库掌握进度</span><strong id="overall-percent">0%</strong></div>
@@ -50,6 +51,9 @@
     </main>
   </div>
   <dialog id="dialog" aria-labelledby="dialog-title"></dialog>
+  <button id="lookup-selection" class="button primary lookup-selection" type="button" hidden>
+    <i class="icon-book-a" aria-hidden="true"></i><span>查释义</span><bdi lang="en"></bdi>
+  </button>
   <div id="notice" class="notice" role="status" hidden></div>
 </body>
 </html>

@@ -7,12 +7,15 @@ import { mountExams } from './exam-view.mjs';
 import { examSectionsFor, papers } from './exams.mjs';
 import { mountExamPractice } from './exam-practice.mjs';
 import { renderExamTopics } from './exam-topics.mjs';
+import { findDefinition, normalizeLookup, saveWord } from './word-lookup.mjs';
 
 const storageKey = 'cet6.study.v1';
 const recordingAccent = 'en-US';
 const view = document.querySelector('#view');
 const dialog = document.querySelector('#dialog');
 const notice = document.querySelector('#notice');
+const lookupButton = document.querySelector('#lookup-selection');
+const dictionaryShards = new Map();
 const chapterNames = ['第一章', '第二章', '第三章', '第四章'];
 const mode = {
   'zh-en': { label: '中译英', title: '中译英默写', icon: 'pencil-line', input: '输入英文' },
@@ -93,7 +96,7 @@ function route() {
     const saved = raw === String(id) && drawDirections(name).includes(roundDirection) && state.runs[`${name}:${id}:${roundDirection}`];
     return saved ? { name, id, direction: roundDirection } : { name };
   }
-  if (name === 'errors' || name === 'settings') return { name };
+  if (['errors', 'settings', 'wordbook'].includes(name)) return { name };
   if (name === 'reading') return { name, date: isReadingDate(raw) ? raw : null };
   if (name === 'exams') return { name, id: raw, scan: direction === 'scan' };
   if (name === 'topics') return { name, section: raw, id: direction };
@@ -135,7 +138,7 @@ function updateShell() {
     if (link.dataset.nav === selected) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   }
-  const labels = { home: '单元目录', unit: unitName(page.id), shuffle: '乱序练习', dictation: '听写', reading: '每日阅读', exams: '六级真题', topics: '专题练习', errors: '错题本', review: '错题复测', settings: '设置与备份' };
+  const labels = { home: '单元目录', unit: unitName(page.id), shuffle: '乱序练习', dictation: '听写', reading: '每日阅读', exams: '六级真题', topics: '专题练习', wordbook: '生词本', errors: '错题本', review: '错题复测', settings: '设置与备份' };
   document.querySelector('#breadcrumb').innerHTML = `学习空间 ${icon('chevron-right')} <strong>${labels[page.name]}</strong>`;
 }
 
@@ -368,11 +371,11 @@ function readingView() {
     ${missingToday ? '<p class="reading-status muted" role="status">今日阅读尚未发布，以下为最新一期。</p>' : ''}
     <article class="reading-article">
       <p class="eyebrow"><time datetime="${article.date}">${article.date}</time> · ${article.wordCount} 词</p>
-      <h2 lang="en">${html(article.title)}</h2>
+      <h2 lang="en" data-lookup-text>${html(article.title)}</h2>
       <div class="reading-body">${article.paragraphs.map((text, index) => {
         const translation = article.translations?.[index];
         return `<div class="reading-pair">
-          <p class="reading-original" lang="en">${readingParagraph(text, words)}</p>
+          <p class="reading-original" lang="en" data-lookup-text>${readingParagraph(text, words)}</p>
           ${typeof translation === 'string' && translation.trim() ? `<p class="reading-translation" lang="zh-CN">${html(translation)}</p>` : ''}
         </div>`;
       }).join('')}</div>
@@ -412,12 +415,13 @@ function settingsView() {
   return `<section class="section-head"><div><p class="eyebrow">SETTINGS / 本机学习</p><h1>设置与备份</h1></div></section>
     <section class="settings-section"><h2>发音</h2><div class="setting-row"><div><strong>美式英语</strong><small id="voice-source">${voiceSource()}</small></div>
       <button class="button" data-action="sample">${icon('volume-2')} 试听</button></div></section>
-    <section class="settings-section"><h2>学习记录</h2><div class="setting-row"><div><strong>导出备份</strong><small>练习进度、真题答题卡和错题</small></div><button class="button" data-action="export">${icon('download')} 导出 JSON</button></div>
+    <section class="settings-section"><h2>学习记录</h2><div class="setting-row"><div><strong>导出备份</strong><small>练习进度、真题答题卡、错题和生词</small></div><button class="button" data-action="export">${icon('download')} 导出 JSON</button></div>
       <div class="setting-row"><div><strong>导入备份</strong><small>用备份替换当前记录</small></div><input id="import-file" type="file" accept="application/json,.json" hidden><button class="button" data-action="import">${icon('upload')} 选择备份</button></div></section>
     <section class="settings-section"><h2>离线使用</h2><div class="setting-row"><div><strong>页面与词库</strong><small id="offline-status">正在检查缓存状态…</small></div><span class="stat-symbol green">${icon('hard-drive')}</span></div></section>`;
 }
 
 function render({ top = false } = {}) {
+  lookupButton.hidden = true;
   unmountExam?.();
   unmountExam = null;
   currentRun = null;
@@ -428,6 +432,7 @@ function render({ top = false } = {}) {
     shuffle: page.direction ? runView : drawView,
     dictation: page.direction ? runView : drawView,
     reading: readingView,
+    wordbook: wordbookView,
     review: runView,
     errors: errorsView,
     settings: settingsView,
@@ -592,6 +597,92 @@ function showDialog(title, content, action) {
   return dialog;
 }
 
+function wordbookView() {
+  const entries = Object.values(state.wordbook).sort((a, b) => Date.parse(b.added) - Date.parse(a.added));
+  return `<section class="section-head"><h1 tabindex="-1">生词本</h1><span class="muted">${entries.length} 个词条</span></section>
+    ${entries.length ? `<ul class="wordbook-list">${entries.map(({ en, gloss }) => `<li class="wordbook-row">
+      <div><h2 lang="en">${html(en)}</h2><p>${html(gloss || '暂无释义')}</p></div>
+      <div class="wordbook-actions">
+        <button class="square" type="button" data-action="speak-saved" data-word="${html(en)}" title="朗读" aria-label="朗读 ${html(en)}">${icon('volume-2')}</button>
+        <button class="square" type="button" data-action="remove-word" data-word="${html(en)}" title="移除" aria-label="移除 ${html(en)}">${icon('trash-2')}</button>
+      </div></li>`).join('')}</ul>` : `<div class="empty">${icon('book-marked')}<h2>还没有生词</h2><a class="button" href="#reading">每日阅读 ${icon('arrow-right')}</a></div>`}`;
+}
+
+function selectedLookup() {
+  const selection = document.getSelection();
+  if (!selection?.rangeCount || selection.isCollapsed || dialog.open) return null;
+  const range = selection.getRangeAt(0);
+  const block = node => (node.nodeType === 1 ? node : node.parentElement)?.closest('[data-lookup-text]');
+  const start = block(range.startContainer);
+  if (!start || start !== block(range.endContainer) || !view.contains(start)) return null;
+  const text = selection.toString().trim().replace(/\s+/g, ' ');
+  return normalizeLookup(text) ? text : null;
+}
+
+function updateLookupSelection() {
+  const term = selectedLookup();
+  lookupButton.hidden = !term;
+  if (term) lookupButton.querySelector('bdi').textContent = term;
+}
+
+function loadDictionaryShard(letter) {
+  if (!dictionaryShards.has(letter)) {
+    dictionaryShards.set(letter, fetch(`./dictionary/${letter}.json`).then(response => {
+      if (!response.ok) throw new Error('Dictionary unavailable');
+      return response.json();
+    }).catch(error => {
+      dictionaryShards.delete(letter);
+      throw error;
+    }));
+  }
+  return dictionaryShards.get(letter);
+}
+
+async function showLookup(term) {
+  lookupButton.hidden = true;
+  document.getSelection()?.removeAllRanges();
+  showDialog(`<span lang="en">${html(term)}</span>`, '<div class="lookup-result"><p role="status">正在查词…</p></div>');
+  const result = dialog.querySelector('.lookup-result');
+  let entry;
+  let unavailable = false;
+  try {
+    entry = await findDefinition(term, bank.words, loadDictionaryShard);
+  } catch {
+    unavailable = true;
+    entry = { en: normalizeLookup(term), gloss: '' };
+  }
+  if (!result.isConnected || !dialog.open) return;
+  const key = normalizeLookup(entry.en);
+  const saved = Object.hasOwn(state.wordbook, key);
+  result.innerHTML = `${key !== normalizeLookup(term) ? `<p class="muted">原形 <strong lang="en">${html(entry.en)}</strong></p>` : ''}
+    <p class="lookup-definition">${html(entry.gloss || (unavailable ? '词典暂时无法打开。' : '词典暂无这个词条的释义。'))}</p>
+    <div class="dialog-actions">
+      ${unavailable ? `<button class="button" type="button" data-lookup-retry>${icon('rotate-ccw')} 重试</button>` : ''}
+      <button class="button primary" type="button" data-lookup-save ${saved ? 'disabled' : ''}>
+        ${saved ? `${icon('check')} 已加入生词本` : `${icon('bookmark-plus')} 加入生词本`}</button>
+    </div>`;
+  result.querySelector('[data-lookup-retry]')?.addEventListener('click', () => {
+    dialog.close();
+    showLookup(term);
+  });
+  const save = result.querySelector('[data-lookup-save]');
+  save.addEventListener('click', () => {
+    if (!saveWord(state, entry)) return;
+    persist();
+    save.disabled = true;
+    save.innerHTML = `${icon('check')} 已加入生词本`;
+  });
+}
+
+document.addEventListener('selectionchange', updateLookupSelection);
+lookupButton.addEventListener('pointerdown', event => {
+  if (event.pointerType === 'mouse') event.preventDefault();
+});
+lookupButton.addEventListener('click', () => {
+  const term = lookupButton.querySelector('bdi').textContent;
+  if (bank && !dialog.open && normalizeLookup(term)) showLookup(term);
+});
+
 function searchResults() {
   const target = dialog.querySelector('#search-results');
   const query = dialog.querySelector('#search-term').value.trim().toLowerCase();
@@ -618,7 +709,7 @@ async function importData(file) {
   try {
     if (file.size > 12 * 1024 * 1024) throw new Error('备份文件过大。');
     const restored = parseBackup(await file.text(), bank);
-    showDialog('恢复学习记录', '<p>导入会替换此浏览器中当前的预习、练习和错题记录。</p><div class="dialog-actions"><button class="button" data-action="close">取消</button><button class="button primary" data-action="confirm">确认恢复</button></div>', () => {
+    showDialog('恢复学习记录', '<p>导入会替换此浏览器中当前的学习记录和生词本。</p><div class="dialog-actions"><button class="button" data-action="close">取消</button><button class="button primary" data-action="confirm">确认恢复</button></div>', () => {
       state = restored;
       persist();
       render();
@@ -630,6 +721,14 @@ async function importData(file) {
 }
 
 const actions = {
+  'remove-word': button => {
+    delete state.wordbook[button.dataset.word];
+    persist();
+    render();
+    view.querySelector('[data-action="remove-word"], h1')?.focus({ preventScroll: true });
+    if (!storageProblem) toast('已移出生词本。');
+  },
+  'speak-saved': button => speakWithSystem(button.dataset.word),
   speak: button => speak(bank.words[button.dataset.id]),
   hear: () => {
     const run = activeRun();

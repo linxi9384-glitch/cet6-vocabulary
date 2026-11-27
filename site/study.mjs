@@ -1,4 +1,5 @@
 import { validExamRuns, validExamTopicRuns } from './exams.mjs';
+import { validWordbook } from './word-lookup.mjs';
 
 export const directions = ['zh-en', 'en-zh'];
 export const practiceDirections = [...directions, 'dictation'];
@@ -9,7 +10,7 @@ const answerLimit = 300;
 const keyFor = (direction, id) => `${direction}:${id}`;
 
 export function blankState() {
-  return { preview: {}, attempts: {}, errors: {}, runs: {}, exams: {}, examTopics: {}, lastUnit: 1, voice: 'en-US' };
+  return { preview: {}, attempts: {}, errors: {}, runs: {}, exams: {}, examTopics: {}, wordbook: {}, lastUnit: 1, voice: 'en-US' };
 }
 
 const partOfSpeech = /(^|\s\/\s)([a-z][a-z./-]*\.)\s*/gi;
@@ -171,6 +172,7 @@ export function parseBackup(text, bank) {
   validate(object(state) && ['preview', 'attempts', 'errors', 'runs'].every(key => object(state[key])));
   validate(state.exams === undefined || validExamRuns(state.exams));
   validate(state.examTopics === undefined || validExamTopicRuns(state.examTopics));
+  validate(state.wordbook === undefined || validWordbook(state.wordbook));
   validate(wordsByUnit.has(state.lastUnit) && ['en-US', 'en-GB'].includes(state.voice));
   for (const [unit, value] of Object.entries(state.preview)) validate(wordsByUnit.has(Number(unit)) && date(value));
 
@@ -218,5 +220,5 @@ export function parseBackup(text, bank) {
       for (const [id, result] of Object.entries(run.results)) validate(idKeys.has(id) && results.includes(result));
     }
   }
-  return state;
+  return { ...state, wordbook: state.wordbook ?? {} };
 }

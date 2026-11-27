@@ -1,7 +1,7 @@
-const cacheName = 'cet6-study-v14';
+const cacheName = 'cet6-study-v15';
 const additions = ['2024-06', '2024-12', '2025-06', '2025-12'];
 const assets = [
-  './', './index.html', './style.css', './app.mjs', './study.mjs', './reading.mjs', './bank.json',
+  './', './index.html', './style.css', './app.mjs', './study.mjs', './reading.mjs', './word-lookup.mjs', './bank.json',
   './exams.mjs', './exam-view.mjs', './exam-pdf.mjs', './vendor/pdfjs/pdf.min.mjs', './vendor/pdfjs/pdf.worker.min.mjs',
   './exam-practice.mjs', './exam-topics.mjs', './exam-explanation.mjs', './exam-additions.mjs',
   './exam-audio.mjs', './exam-audio-data.mjs',
@@ -53,7 +53,7 @@ self.addEventListener('fetch', event => {
     event.respondWith(caches.open(cacheName).then(cache => cache.match(request)).then(response => response ?? fetch(request)));
   } else if (/^readings\/(?:index|\d{4}-\d{2}-\d{2})\.json$/.test(request.url.slice(self.registration.scope.length))) {
     event.respondWith(fetchReading(request));
-  } else if (/^exam-explanations\/\d{4}-\d{2}\/\d+\.webp$/.test(request.url.slice(self.registration.scope.length))) {
+  } else if (/^(?:exam-explanations\/\d{4}-\d{2}\/\d+\.webp|dictionary\/[a-z]\.json)$/.test(request.url.slice(self.registration.scope.length))) {
     event.respondWith(fetchExplanation(request));
   }
 });

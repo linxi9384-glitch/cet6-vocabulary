@@ -1,7 +1,7 @@
-const cacheName = 'cet6-study-v15';
+const cacheName = 'cet6-study-v16';
 const additions = ['2024-06', '2024-12', '2025-06', '2025-12'];
 const assets = [
-  './', './index.html', './style.css', './app.mjs', './study.mjs', './reading.mjs', './word-lookup.mjs', './bank.json',
+  './', './index.html', './style.css', './app.mjs', './study.mjs', './reading.mjs', './word-lookup.mjs', './study-timer.mjs', './bank.json',
   './exams.mjs', './exam-view.mjs', './exam-pdf.mjs', './vendor/pdfjs/pdf.min.mjs', './vendor/pdfjs/pdf.worker.min.mjs',
   './exam-practice.mjs', './exam-topics.mjs', './exam-explanation.mjs', './exam-additions.mjs',
   './exam-audio.mjs', './exam-audio-data.mjs',

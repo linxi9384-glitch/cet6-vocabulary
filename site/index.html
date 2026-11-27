@@ -41,7 +41,17 @@
       <header class="topbar">
         <div id="breadcrumb" class="breadcrumb">学习空间</div>
         <div class="topbar-tools">
-          <button type="button" class="search-button" data-action="search" title="搜索词条">
+          <div id="study-timer" class="study-timer" role="group" aria-label="学习计时器">
+            <i class="icon-timer" aria-hidden="true"></i>
+            <span role="timer" aria-label="已用时间">00:00:00</span>
+            <button type="button" class="square" data-timer-toggle aria-label="开始计时" title="开始计时">
+              <i class="icon-play" aria-hidden="true"></i>
+            </button>
+            <button type="button" class="square" data-timer-reset aria-label="计时归零" title="计时归零" disabled>
+              <i class="icon-rotate-ccw" aria-hidden="true"></i>
+            </button>
+          </div>
+          <button type="button" class="search-button" data-action="search" aria-label="搜索词条" title="搜索词条">
             <i class="icon-search" aria-hidden="true"></i><span>搜索词条</span>
           </button>
           <span class="device"><span></span><span id="connection-label">本机学习</span></span>

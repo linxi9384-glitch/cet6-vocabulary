@@ -228,6 +228,39 @@ def dictation(context, screenshots=None):
     page.close()
 
 
+def study_timer(context):
+    page = context.new_page()
+    page.clock.install()
+    page.goto(ROOT)
+    timer = page.get_by_role("timer")
+    reset = page.get_by_role("button", name="计时归零", exact=True)
+    expect(timer).to_have_text("00:00:00")
+    expect(reset).to_be_disabled()
+    page.get_by_role("button", name="开始计时", exact=True).click()
+    page.clock.fast_forward(10_000)
+    expect(timer).to_have_text("00:00:10")
+    page.get_by_role("link", name="阅读", exact=True).click()
+    expect(page.get_by_role("heading", name="每日阅读", exact=True)).to_be_visible()
+    page.clock.fast_forward(4_000)
+    expect(timer).to_have_text("00:00:14")
+    page.get_by_role("button", name="暂停计时", exact=True).click()
+    page.clock.fast_forward(8_000)
+    expect(timer).to_have_text("00:00:14")
+    page.reload()
+    expect(timer).to_have_text("00:00:14")
+    page.get_by_role("button", name="继续计时", exact=True).click()
+    page.clock.fast_forward(3_000)
+    expect(timer).to_have_text("00:00:17")
+    reset.click()
+    expect(timer).to_have_text("00:00:00")
+    expect(page.get_by_role("button", name="开始计时", exact=True)).to_be_visible()
+    page.locator(".reading-article").wait_for()
+    page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+    assert page.locator(".topbar").bounding_box()["y"] >= -1
+    no_overflow(page)
+    page.close()
+
+
 def device_layout(browser, screenshots):
     for width, height in [(820, 1180), (1180, 820), (390, 844), (320, 640)]:
         page = browser.new_page(viewport={"width": width, "height": height}, has_touch=True)
@@ -626,11 +659,13 @@ if __name__ == "__main__":
         exam_topics(browser.new_context(viewport={"width": 390, "height": 844}, has_touch=True), screenshots, recent_pdf)
         exam_listening(browser.new_context(viewport={"width": 390, "height": 844}, has_touch=True))
         word_lookup(browser.new_context(viewport={"width": 390, "height": 844}, has_touch=True), screenshots)
+        study_timer(browser.new_context(viewport={"width": 320, "height": 640}, has_touch=True))
         device_layout(browser, screenshots)
         browser.close()
         webkit = playwright.webkit.launch()
         exam_topics(webkit.new_context(viewport={"width": 820, "height": 1180}, has_touch=True), screenshots, check_offline=False)
         exam_listening(webkit.new_context(viewport={"width": 820, "height": 1180}, has_touch=True))
         word_lookup(webkit.new_context(viewport={"width": 820, "height": 1180}, has_touch=True), screenshots)
+        study_timer(webkit.new_context(viewport={"width": 820, "height": 1180}, has_touch=True))
         webkit.close()
     print("Verified vocabulary choices, handwritten spacing, dictation, exams, daily reading, backup and offline use.")

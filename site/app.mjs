@@ -8,6 +8,7 @@ import { examSectionsFor, papers } from './exams.mjs';
 import { mountExamPractice } from './exam-practice.mjs';
 import { renderExamTopics } from './exam-topics.mjs';
 import { findDefinition, normalizeLookup, saveWord } from './word-lookup.mjs';
+import { mountStudyTimer } from './study-timer.mjs';
 
 const storageKey = 'cet6.study.v1';
 const recordingAccent = 'en-US';
@@ -139,7 +140,7 @@ function updateShell() {
     else link.removeAttribute('aria-current');
   }
   const labels = { home: '单元目录', unit: unitName(page.id), shuffle: '乱序练习', dictation: '听写', reading: '每日阅读', exams: '六级真题', topics: '专题练习', wordbook: '生词本', errors: '错题本', review: '错题复测', settings: '设置与备份' };
-  document.querySelector('#breadcrumb').innerHTML = `学习空间 ${icon('chevron-right')} <strong>${labels[page.name]}</strong>`;
+  document.querySelector('#breadcrumb').innerHTML = `<span>学习空间</span> ${icon('chevron-right')} <strong>${labels[page.name]}</strong>`;
 }
 
 function stat(label, value, max, glyph, tone) {
@@ -935,4 +936,5 @@ async function main() {
   }
 }
 
+mountStudyTimer(document.querySelector('#study-timer'));
 main();

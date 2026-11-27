@@ -50,11 +50,17 @@ i[class^="icon-"] { display: inline-flex; flex: none; line-height: 1; align-item
 .meter > span { display: block; height: 100%; width: 0; border-radius: inherit; background: #4c8a68; }
 
 .workspace { min-width: 0; }
-.topbar { min-height: 69px; border-bottom: 1px solid var(--line); background: #ffffffdb; padding: 0 34px; display: flex; align-items: center; justify-content: space-between; gap: 13px; }
+.topbar { position: sticky; top: 0; z-index: 4; min-height: 69px; border-bottom: 1px solid var(--line); background: var(--paper); padding: 0 34px; display: flex; align-items: center; justify-content: space-between; gap: 13px; }
+html { scroll-padding-top: 77px; }
 .breadcrumb, .topbar-tools { display: flex; align-items: center; gap: 9px; font-size: 13px; color: var(--muted); }
 .breadcrumb strong { color: var(--ink); font-weight: 650; }
 .breadcrumb i { font-size: 13px; }
-.topbar-tools { gap: 14px; }
+.topbar-tools { gap: 14px; flex: none; }
+.study-timer { display: flex; align-items: center; gap: 4px; color: var(--muted); }
+.study-timer > i { font-size: 16px; }
+.study-timer [role="timer"] { min-width: 8ch; color: var(--ink); font-variant-numeric: tabular-nums; text-align: center; }
+.study-timer .square { width: 44px; min-height: 44px; }
+.study-timer.is-running [data-timer-toggle] { background: var(--mint); color: var(--green); }
 .search-button { min-height: 38px; padding: 0 12px; display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--paper); color: var(--muted); }
 .search-button:hover, .button:hover, .square:hover { border-color: #a7baab; color: var(--green); }
 .search-button i { font-size: 15px; }
@@ -399,6 +405,7 @@ dialog:has(.exam-explanation-image) { width: min(820px, calc(100% - 20px)); max-
 }
 
 @media (max-width: 760px) {
+  html { scroll-padding-top: 59px; }
   .shell { display: block; }
   .sidebar { position: static; display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; height: auto; min-height: 60px; border-right: 0; border-bottom: 1px solid var(--line); padding: 7px max(12px, env(safe-area-inset-right)) 7px max(12px, env(safe-area-inset-left)); gap: 8px; }
   .brand { padding: 0; gap: 7px; }
@@ -424,7 +431,10 @@ dialog:has(.exam-explanation-image) { width: min(820px, calc(100% - 20px)); max-
   .nav a i { display: none; }
   .nav-count { display: none; }
   .breadcrumb, .topbar-tools { font-size: 11px; }
+  .breadcrumb > span, .breadcrumb > i, .study-timer > i, .topbar-tools .search-button span { display: none; }
+  .topbar { gap: 6px; }
   .topbar-tools .search-button { min-height: 34px; padding-inline: 7px; font-size: 11px; gap: 5px; }
+  .topbar-tools .search-button { width: 44px; min-height: 44px; justify-content: center; }
   .topbar-tools .search-button i { font-size: 13px; }
   .device { display: none; }
   .home-heading { align-items: end; }
